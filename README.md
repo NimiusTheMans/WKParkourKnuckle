@@ -10,6 +10,7 @@ You can run on the side of walls by standing close to a wall and holding the spa
 
 ## Vertical Wall Running
 You have the ability to run up to walls and climb them without needing any tools whatsoever. Holding spacebar and W at the same time while facing a wall will begin a vertical wall run. This consumes a moderate amount of hand stamina.
+
 ![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/WallRunVert.gif?raw=true)\
 
 ## Wall Run Boost
