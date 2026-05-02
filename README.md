@@ -8,7 +8,7 @@ This mod adds various movement types that attempt to aid you in your attempt to 
 
 You can run on the side of walls by standing close to a wall and holding the spacebar and A or D depending on which side of the wall you are standing near. This consumes very little hand stamina.
 
-![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/master/Assets/Gifs/WallRunHoriz.gif?raw=true)\
+![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/WallRunHoriz.gif?raw=true)\
 ## Vertical Wall Running
 
 You have the ability to run up to walls and climb them as well without needing any tools whatsoever. Holding spacebar and W at the same time while facing a wall will begin a vertical wall run. This consumes a moderate amount of hand stamina.
