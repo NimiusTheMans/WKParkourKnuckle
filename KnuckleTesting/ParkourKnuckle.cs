@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace ParkourKnuckle
 {
-    [BepInPlugin("com.nimius.parkourknuckle", "Parkour Knuckle", "1.0.0")]
+    [BepInPlugin("com.nimius.parkourknuckle", "Parkour Knuckle", "1.2.1")]
     public class Plugin : BaseUnityPlugin
     {
         private Harmony _harmony;
@@ -68,6 +68,7 @@ namespace ParkourKnuckle
         [HarmonyPostfix]
         public static void Postfix(ENT_Player __instance)
         {
+            CL_GameManager.SetGameFlag("leaderboardIllegal", true);
             var player = __instance;
             bool onCooldown = Time.time < lastLeapTime + leapCooldown;
             var controller = player.GetComponent<CharacterController>();
