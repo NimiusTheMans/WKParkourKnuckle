@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
@@ -26,15 +26,19 @@ namespace ParkourKnuckle
         private static Quaternion targetRotation;
         private static bool isRotating = false;
         private static float turnSpeed = 24f;
-        
+        private static bool onCooldown = false;
+        private static float CooldownDur = 0.2f;
+        private static float CooldownTime = 0f;
+
         private static float chargeStartTime;
         private static bool isCharging;
         private static float maxChargeTime = 5f;
-        private static float leapForceMultiplier = 1.5f;
-        private static float lastLeapTime = 0f;
-        private static float leapCooldown = 3f;
+        private static float leapForceMultiplier = 0.8f;
+        private static float leapCooldownTime = 0f;
+        private static float leapCooldownDur = 2f;
+        private static bool leapCooldown = false;
         private static float minStamina = 1;
-        private static float maxStamina = 8;
+        private static float maxStamina = 6;
         private static float upwardArcForce = 1f;
         private static bool isHolding = false;
 
@@ -70,10 +74,8 @@ namespace ParkourKnuckle
         {
             CL_GameManager.SetGameFlag("leaderboardIllegal", true);
             var player = __instance;
-            bool onCooldown = Time.time < lastLeapTime + leapCooldown;
             var controller = player.GetComponent<CharacterController>();
             bool isGrounded = controller.isGrounded;
-            Debug.Log($"{isHolding}");
             isHolding = false;
 
             foreach (var hand in player.hands)
@@ -82,11 +84,25 @@ namespace ParkourKnuckle
                 {
                     isHolding = true;
                     break;
-                }                
+                }
             }
 
-            if (Input.GetKeyUp(KeyCode.X) && !onCooldown && !isHorizRun && player.health > 0f && (isGrounded || isHolding))
+            if (onCooldown)
             {
+                if (!isRotating)
+                {
+                    CooldownTime += Time.deltaTime;
+                }
+                if (CooldownTime >= CooldownDur)
+                {
+                    onCooldown = false;
+                    CooldownTime = 0f;
+                }
+            }
+
+            if (Input.GetKeyUp(KeyCode.X) && !onCooldown && !isHorizRun && player.health > 0f)
+            {
+                onCooldown = true;
                 targetRotation = player.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
                 isRotating = true;
             }
@@ -101,7 +117,20 @@ namespace ParkourKnuckle
                 }
             }
 
-            if (Input.GetKeyDown(KeyCode.G) && (isGrounded || isHolding))
+            if (leapCooldown)
+            {
+                if (isGrounded)
+                {
+                    leapCooldownTime += Time.deltaTime;
+                }
+                if (leapCooldownTime >= leapCooldownDur)
+                {
+                    leapCooldown = false;
+                    leapCooldownTime = 0f;
+                }
+            }
+
+            if (Input.GetKeyDown(KeyCode.G) && (isGrounded || isHolding) && !leapCooldown)
             {
                 if (isGrounded || isHolding)
                 {
@@ -123,18 +152,18 @@ namespace ParkourKnuckle
                 }
             }
 
-            if (isCharging && Input.GetKey(KeyCode.G) && (isGrounded || isHolding))
+            if (isCharging && Input.GetKey(KeyCode.G) && (isGrounded || isHolding) && !leapCooldown)
             {
                 float currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
-                CL_CameraControl.Shake(currentCharge * 0.001f);
+                CL_CameraControl.Shake(currentCharge * Time.deltaTime * 0.025f);
 
                 foreach (var hand in player.hands)
                 {
-                    hand.ShakeHand(currentCharge * 0.001f);
+                    hand.ShakeHand(currentCharge * Time.deltaTime * 0.025f);
                 }
             }
 
-            if (Input.GetKeyUp(KeyCode.G) && isCharging && (isGrounded || isHolding))
+            if (Input.GetKeyUp(KeyCode.G) && isCharging && (isGrounded || isHolding) && !leapCooldown)
             {
                 if (!isGrounded && !isHolding)
                 {
@@ -165,10 +194,11 @@ namespace ParkourKnuckle
                     }
                 }
 
+                leapCooldown = true;
                 isCharging = false;
             }
 
-            if (Input.GetKeyDown(KeyCode.Space) && Input.GetKey(KeyCode.S) && !Input.GetKey(KeyCode.W))
+            if (Input.GetKeyDown(KeyCode.Space) && Input.GetKey(KeyCode.S))
             {
                 bool bothStamina = true;
                 foreach (var hand in player.hands)
@@ -190,7 +220,7 @@ namespace ParkourKnuckle
 
                         player.SetDirectionalForce(kickDir.normalized * kickForce);
 
-                        CL_CameraControl.Shake(0.03f);
+                        CL_CameraControl.Shake(Time.deltaTime * 0.15f);
 
                         foreach (var hand in player.hands)
                         {
@@ -275,10 +305,10 @@ namespace ParkourKnuckle
                     player.transform.rotation = Quaternion.Slerp(player.transform.rotation, lookRot, Time.deltaTime * tiltLerpSpeed);
                     player.SetDirectionalForce(((runDir * 0.8f) * (gripValue * 0.1f) + (Vector3.up * 0.1f)));
 
-                    CL_CameraControl.Shake(0.005f);
+                    CL_CameraControl.Shake(Time.deltaTime * 0.25f);
                     foreach (var hand in player.hands)
                     {
-                        hand.gripStrength -= 0.075f;
+                        hand.gripStrength -= Time.deltaTime * 2.5f;
                         if (hand.gripStrength < 0) hand.gripStrength = 0;
                     }
                 }
@@ -320,6 +350,23 @@ namespace ParkourKnuckle
                 }
             }
 
+            bool stamVertRun = true;
+
+            foreach (var hand in player.hands)
+            {
+                if (hand.gripStrength <= 0)
+                {
+                    stamVertRun = false;
+                }
+            }
+
+            if (isVerticalRun && !stamVertRun)
+            {
+                isVerticalRun = false;
+                hasWallRunVertical = true;
+                return;
+            }
+
             if (isVerticalRun && Input.GetKeyDown(KeyCode.Space) && verticalGraceTimer > 0 && verticalGraceTimer < maxGraceTime)
             {
                 float pushAwayForce = 1.5f;
@@ -358,7 +405,7 @@ namespace ParkourKnuckle
 
                 return;
             }
-            
+
             if (isHoldingRun && !hasWallRunVertical && wallFront && (!hasWallRunVertical || isVerticalRun) && (verticalGraceTimer == 0f))
             {
                 if (!isVerticalRun && !hasDoubleTappedRun)
@@ -431,10 +478,10 @@ namespace ParkourKnuckle
                         Vector3 climbVelocity = (Vector3.up * 0.4f) * (gripValue * 0.15f);
                         player.SetDirectionalForce(climbVelocity);
 
-                        CL_CameraControl.Shake(0.008f);
+                        CL_CameraControl.Shake(Time.deltaTime * 0.4f);
                         foreach (var hand in player.hands)
                         {
-                            hand.gripStrength -= 0.09f;
+                            hand.gripStrength -= Time.deltaTime * 4.5f;
                             if (hand.gripStrength < 0f) hand.gripStrength = 0f;
                         }
                         return;
@@ -474,7 +521,7 @@ namespace ParkourKnuckle
                     slideTargetPos = slideStartPos + (slideDir * 10f);
 
                     controller.enabled = false;
-                    CL_CameraControl.Shake(0.01f);
+                    CL_CameraControl.Shake(Time.deltaTime * 0.1f);
                 }
             }
 
@@ -502,7 +549,7 @@ namespace ParkourKnuckle
                     if (hasEnoughStamina)
                     {
                         player.SetDirectionalForce(lungeVelocity);
-                        CL_CameraControl.Shake(lungeVelocity.magnitude * 0.01f);
+                        CL_CameraControl.Shake(lungeVelocity.magnitude * Time.deltaTime * 0.1f);
 
                         foreach (var hand in player.hands)
                         {
@@ -527,7 +574,7 @@ namespace ParkourKnuckle
                     slideTargetPos = player.transform.position;
                     slideTime = slideDuration;
 
-                    CL_CameraControl.Shake(0.03f);
+                    CL_CameraControl.Shake(Time.deltaTime * 0.1f);
 
                     isSliding = false;
                     controller.enabled = true;
