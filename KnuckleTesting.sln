@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37216.2 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KnuckleTesting", "KnuckleTesting\KnuckleTesting.csproj", "{9407F467-496E-4117-8715-BDFE3BCE9F1B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9407F467-496E-4117-8715-BDFE3BCE9F1B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9407F467-496E-4117-8715-BDFE3BCE9F1B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9407F467-496E-4117-8715-BDFE3BCE9F1B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9407F467-496E-4117-8715-BDFE3BCE9F1B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F793D613-28A6-46FF-9B39-D504EB6CF58E}
+	EndGlobalSection
+EndGlobal
