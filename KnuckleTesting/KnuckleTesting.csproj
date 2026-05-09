@@ -12,7 +12,10 @@
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+<<<<<<< HEAD
     <TargetFrameworkProfile />
+=======
+>>>>>>> 8b9da22d1fcfdbf7faf218b597beecd8cbe9b27c
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -60,22 +63,39 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\SteamLibrary\steamapps\common\White Knuckle\White Knuckle_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
+<<<<<<< HEAD
     <Reference Include="UnityEngine.IMGUIModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\SteamLibrary\steamapps\common\White Knuckle\White Knuckle_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
     </Reference>
+=======
+>>>>>>> 8b9da22d1fcfdbf7faf218b597beecd8cbe9b27c
     <Reference Include="UnityEngine.InputLegacyModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\SteamLibrary\steamapps\common\White Knuckle\White Knuckle_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
+<<<<<<< HEAD
     <Reference Include="UnityEngine.PhysicsModule">
       <HintPath>..\..\..\SteamLibrary\steamapps\common\White Knuckle\White Knuckle_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
+=======
+    <Reference Include="UnityEngine.PhysicsModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\White Knuckle\White Knuckle_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\White Knuckle\White Knuckle_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+>>>>>>> 8b9da22d1fcfdbf7faf218b597beecd8cbe9b27c
     </Reference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>xcopy /y /d "$(TargetDir)ParkourKnuckle.dll" "D:\SteamLibrary\steamapps\common\White Knuckle\BepInEx\plugins\"
+<<<<<<< HEAD
 xcopy /y /d "$(TargetDir)ParkourKnuckle.dll" "C:\Program Files (x86)\Steam\steamapps\common\White Knuckle\BepInEx\plugins\"
 		</PostBuildEvent>
+=======
+xcopy /y /d "$(TargetDir)ParkourKnuckle.dll" "C:\Program Files (x86)\Steam\steamapps\common\White Knuckle\BepInEx\plugins\"</PostBuildEvent>
+>>>>>>> 8b9da22d1fcfdbf7faf218b597beecd8cbe9b27c
   </PropertyGroup>
 </Project>

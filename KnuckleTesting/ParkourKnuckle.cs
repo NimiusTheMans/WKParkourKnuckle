@@ -6,7 +6,7 @@ using UnityEngine;
 namespace ParkourKnuckle
 {
     [BepInPlugin("com.nimius.parkourknuckle", "Parkour Knuckle", "1.2.1")]
-    public class Plugin : BaseUnityPlugin 
+    public class Plugin : BaseUnityPlugin
     {
         private Harmony _harmony;
         public static ConfigEntry<bool> EnableParkourRotation;
@@ -32,8 +32,6 @@ namespace ParkourKnuckle
 
         private static float chargeStartTime;
         private static bool isCharging;
-        private static float maxChargeTime = 3.5f;
-        private static float leapForceMultiplier = 1f;
         private static float leapCooldownTime = 0f;
         private static float leapCooldownDur = 2f;
         private static bool leapCooldown = false;
