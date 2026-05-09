@@ -48,3 +48,8 @@ While running (or moving at a high velocity), hold down the crouch key to slide.
 During a slide, you can jump to gain a boost. This boost does consume hand stamina. As the duration of your slide grows, less power will be put into the boost, however, less stamina will be taken.
 
 ![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/SlideJump.gif?raw=true)
+
+## Rolling
+While you are falling from great height, hold down your crouch button to initiate a roll when you land. This takes no stamina, and does not currently prevent fall damage.
+
+![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/Roll.gif?raw=true)
