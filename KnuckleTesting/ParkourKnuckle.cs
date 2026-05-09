@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
@@ -82,7 +82,11 @@ namespace ParkourKnuckle
         [HarmonyPostfix]
         public static void Postfix(ENT_Player __instance)
         {
-            CL_GameManager.SetGameFlag("leaderboardIllegal", true);
+            if (CL_GameManager.gamemode.allowLeaderboardScoring)
+            {
+                CL_GameManager.gamemode.allowLeaderboardScoring = false;
+            }
+
             var player = __instance;
             var controller = player.GetComponent<CharacterController>();
             bool isGrounded = controller.isGrounded;
