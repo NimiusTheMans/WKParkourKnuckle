@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ## Description
 This mod adds various movement types that attempt to aid you in your attempt to escape.
 
@@ -49,7 +48,6 @@ While running (or moving at a high velocity), hold down the crouch key to slide.
 During a slide, you can jump to gain a boost. This boost does consume hand stamina. As the duration of your slide grows, less power will be put into the boost, however, less stamina will be taken.
 
 ![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/SlideJump.gif?raw=true)
-=======
 ## Description
 This mod adds various movement types that attempt to aid you in your attempt to escape.
 
@@ -100,4 +98,3 @@ While running (or moving at a high velocity), hold down the crouch key to slide.
 During a slide, you can jump to gain a boost. This boost does consume hand stamina. As the duration of your slide grows, less power will be put into the boost, however, less stamina will be taken.
 
 ![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/SlideJump.gif?raw=true)
->>>>>>> 8b9da22d1fcfdbf7faf218b597beecd8cbe9b27c
