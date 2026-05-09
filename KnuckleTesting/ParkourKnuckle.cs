@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
@@ -32,8 +32,6 @@ namespace ParkourKnuckle
 
         private static float chargeStartTime;
         private static bool isCharging;
-        private static float maxChargeTime = 5f;
-        private static float leapForceMultiplier = 0.8f;
         private static float leapCooldownTime = 0f;
         private static float leapCooldownDur = 2f;
         private static bool leapCooldown = false;
@@ -68,6 +66,16 @@ namespace ParkourKnuckle
         private static float slideDuration = 1.8f;
         private static Vector3 slideStartPos;
         private static Vector3 slideTargetPos;
+
+        private static float startY;
+        private static bool wasGrounded;
+        private static bool isRotatingRoll = false;
+        private static Quaternion startRotationRoll;
+        private static Vector3 rollStartPos;
+        private static Vector3 rollTargetPos;
+        private static Vector3 rollDir;
+        private static float rollTimer = 0f;
+        private static float rollDur = 0.5f;
 
         [HarmonyPostfix]
         public static void Postfix(ENT_Player __instance)
@@ -595,6 +603,68 @@ namespace ParkourKnuckle
                     }
                 }
             }
+
+            if (wasGrounded && !isGrounded)
+            {
+                startY = player.transform.position.y;
+            }
+
+            if (!wasGrounded && isGrounded)
+            {
+                float fallDistance = startY - player.transform.position.y;
+
+                if (fallDistance >= 15 && fallDistance <= 50 && player.IsCrouching() && !isRotatingRoll)
+                {
+                    isRotatingRoll = true;
+                    rollTimer = 0f;
+                    startRotationRoll = player.transform.rotation;
+                    controller.enabled = false;
+
+                    rollDir = player.transform.forward;
+                    rollDir.y = 0;
+                    rollDir.Normalize();
+
+                    rollStartPos = player.transform.position;
+                    rollTargetPos = rollStartPos + (rollDir * 5f);
+                }
+            }
+
+            if (isRotatingRoll)
+            {
+                rollTimer += Time.deltaTime;
+                float RollPercent = rollTimer / rollDur;
+                float currentX = Mathf.Lerp(0f, 360f, RollPercent);
+                player.transform.rotation = startRotationRoll * Quaternion.Euler(currentX, 0f, 0f);
+                if (RollPercent >= 1f)
+                {
+                    player.transform.rotation = startRotationRoll;
+                    player.UnLock();
+                    isRotatingRoll = false;
+                }
+
+                float tRoll = rollTimer / rollDur;
+                float easedTRoll = 1 - (1 - tRoll) * (1 - tRoll);
+                Vector3 nextPosRoll = Vector3.Lerp(rollStartPos, rollTargetPos, easedTRoll);
+
+                if (Physics.Raycast(player.transform.position + (Vector3.up * 0.05f) + (rollDir * 0.3f), rollDir, 0.8f))
+                {
+                    rollTargetPos = player.transform.position;
+                    rollTimer = rollDur;
+
+                    controller.enabled = true;
+                    return;
+                }
+                else if (tRoll >= 1.0f)
+                {
+                    controller.enabled = true;
+                }
+                else
+                {
+                    player.transform.position = nextPosRoll;
+                }
+            }
+
+            wasGrounded = isGrounded;
         }
     }
 }
