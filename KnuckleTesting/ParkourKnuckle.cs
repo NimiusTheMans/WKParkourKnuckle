@@ -32,8 +32,10 @@ namespace ParkourKnuckle
 
         private static float chargeStartTime;
         private static bool isCharging;
+        private static float maxChargeTime = 3.5f;
         private static float leapCooldownTime = 0f;
         private static float leapCooldownDur = 2f;
+        private static float leapForceMultiplier = 1f;
         private static bool leapCooldown = false;
         private static float minStamina = 1;
         private static float maxStamina = 6;
@@ -634,7 +636,11 @@ namespace ParkourKnuckle
                 rollTimer += Time.deltaTime;
                 float RollPercent = rollTimer / rollDur;
                 float currentX = Mathf.Lerp(0f, 360f, RollPercent);
-                player.transform.rotation = startRotationRoll * Quaternion.Euler(currentX, 0f, 0f);
+                if (Plugin.EnableParkourRotation.Value)
+                {
+                    player.transform.rotation = startRotationRoll * Quaternion.Euler(currentX, 0f, 0f);
+                }
+
                 if (RollPercent >= 1f)
                 {
                     player.transform.rotation = startRotationRoll;
