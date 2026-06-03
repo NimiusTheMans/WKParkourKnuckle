@@ -78,6 +78,38 @@ namespace ParkourKnuckle
         private static Vector3 rollDir;
         private static float rollTimer = 0f;
         private static float rollDur = 0.5f;
+        private static bool cancelNextRollingFallDamage = false;
+        private static float rollingFallDamageCancelExpiresAt = -1f;
+        private const float rollingFallDamageCancelGrace = 0.2f;
+
+        private static void ArmRollingFallDamageCancel()
+        {
+            cancelNextRollingFallDamage = true;
+            rollingFallDamageCancelExpiresAt = Time.time + rollingFallDamageCancelGrace;
+        }
+
+        private static void ExpireRollingFallDamageCancel()
+        {
+            if (cancelNextRollingFallDamage && Time.time > rollingFallDamageCancelExpiresAt)
+            {
+                cancelNextRollingFallDamage = false;
+                rollingFallDamageCancelExpiresAt = -1f;
+            }
+        }
+
+        public static bool TryCancelRollingFallDamage(Damageable.DamageInfo info)
+        {
+            ExpireRollingFallDamageCancel();
+
+            if (!cancelNextRollingFallDamage || info == null || !info.HasTag("falling"))
+            {
+                return false;
+            }
+
+            cancelNextRollingFallDamage = false;
+            rollingFallDamageCancelExpiresAt = -1f;
+            return true;
+        }
 
         [HarmonyPostfix]
         public static void Postfix(ENT_Player __instance)
@@ -91,6 +123,7 @@ namespace ParkourKnuckle
             var controller = player.GetComponent<CharacterController>();
             bool isGrounded = controller.isGrounded;
             isHolding = false;
+            ExpireRollingFallDamageCancel();
 
             foreach (var hand in player.hands)
             {
@@ -619,12 +652,13 @@ namespace ParkourKnuckle
             {
                 float fallDistance = startY - player.transform.position.y;
 
-                if (fallDistance >= 15 && fallDistance <= 50 && player.IsCrouching() && !isRotatingRoll)
+                if (fallDistance >= 15 && player.IsCrouching() && !isRotatingRoll)
                 {
                     isRotatingRoll = true;
                     rollTimer = 0f;
                     startRotationRoll = player.transform.rotation;
                     controller.enabled = false;
+                    ArmRollingFallDamageCancel();
 
                     rollDir = player.transform.forward;
                     rollDir.y = 0;
@@ -675,6 +709,22 @@ namespace ParkourKnuckle
             }
 
             wasGrounded = isGrounded;
+        }
+    }
+
+    [HarmonyPatch(typeof(ENT_Player), "Damage")]
+    public class RollingFallDamagePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Damageable.DamageInfo info, ref bool __result)
+        {
+            if (!PlayerModifierPatch.TryCancelRollingFallDamage(info))
+            {
+                return true;
+            }
+
+            __result = false;
+            return false;
         }
     }
 }
