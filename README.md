@@ -1,8 +1,16 @@
 ## Description
 This mod adds various movement types that attempt to aid you in your attempt to escape.
 
-***This mod is still being worked on, and this is my first modding project, so it would be best to expect bugs to appear. I plan to update this mod often, and feedback would be greatly appreciated.***
-*Another note: AI was used in partial to help with the development of the code considering my knowledge of C# is not as large as I wish it was.*
+*Developer note: AI was used in partial to help with the development of the code.*
+
+## Unlock Abilities
+**Use Height Currency to Buy Skills**
+
+![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Pictures/CurrencyPicture.png?raw=true)
+
+**Buy Skills in the Skill Tree**
+
+![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Pictures/SkillTreePicture.png?raw=true)
 
 ## Wall Running
 **Horizontal Wall Running**

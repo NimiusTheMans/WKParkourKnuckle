@@ -1,7 +1,13 @@
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
+using ParkourKnuckle.UI;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace ParkourKnuckle
 {
@@ -9,14 +15,42 @@ namespace ParkourKnuckle
     public class Plugin : BaseUnityPlugin
     {
         private Harmony _harmony;
+
         public static ConfigEntry<bool> EnableParkourRotation;
+        public static bool isUIVisible = false;
+
+        public static ConfigFile ProgressionFile;
+        public static Dictionary<string, ConfigEntry<bool>> SkillConfigs = new Dictionary<string, ConfigEntry<bool>>();
+        public static ConfigFile CurrencyFile;
+        public static Dictionary<string, ConfigEntry<float>> CurrencyConfigs = new Dictionary<string, ConfigEntry<float>>();
+
         void Awake()
         {
             EnableParkourRotation = Config.Bind("Camera Settings", "Use Parkour Rotation", true, "Determines whether the camera will tilt and rotate differently when doing parkour actions.");
 
+            string saveSkillPath = Path.Combine(Paths.ConfigPath, "parkourprogress.cfg");
+            ProgressionFile = new ConfigFile(saveSkillPath, true);
+            string saveCurrencyPath = Path.Combine(Paths.ConfigPath, "parkourprogress.cfg");
+            CurrencyFile = new ConfigFile(saveCurrencyPath, true);
+
+            SkillConfigs["QuickTurning"] = ProgressionFile.Bind("Progression", "QuickTurning", false, "");
+            SkillConfigs["Sliding"] = ProgressionFile.Bind("Progression", "Sliding", false, "");
+            SkillConfigs["SlideJumping"] = ProgressionFile.Bind("Progression", "SlideJumping", false, "");
+            SkillConfigs["Leaping"] = ProgressionFile.Bind("Progression", "Leaping", false, "");
+            SkillConfigs["Rolling"] = ProgressionFile.Bind("Progression", "Rolling", false, "");
+            SkillConfigs["WallKicking"] = ProgressionFile.Bind("Progression", "WallKicking", false, "");
+            SkillConfigs["WallRunning"] = ProgressionFile.Bind("Progression", "WallRunning", false, "");
+            SkillConfigs["VerticalWallRunning"] = ProgressionFile.Bind("Progression", "VerticalWallRunning", false, "");
+            SkillConfigs["WallRunBoost"] = ProgressionFile.Bind("Progression", "WallRunBoost", false, "");
+            CurrencyConfigs["HeightCurrency"] = CurrencyFile.Bind("Currency", "HeightCurrency", 0f, "");
+            CurrencyConfigs["MaxHeight"] = CurrencyFile.Bind("Currency", "MaxHeight", 0f, "");
+
             this._harmony = new Harmony("com.nimius.parkourknuckle");
             this._harmony.PatchAll();
             Logger.LogInfo("Harmony Patches applied successfully.");
+
+            ParkourUI.Initialize();
+            Logger.LogInfo("Parkour UI Engine Initialized.");
         }
     }
 
@@ -25,25 +59,25 @@ namespace ParkourKnuckle
     {
         private static Quaternion targetRotation;
         private static bool isRotating = false;
-        private static float turnSpeed = 24f;
+        private static readonly float turnSpeed = 24f;
         private static bool onCooldown = false;
-        private static float CooldownDur = 0.2f;
+        private static readonly float CooldownDur = 0.2f;
         private static float CooldownTime = 0f;
 
         private static float chargeStartTime;
         private static bool isCharging;
-        private static float maxChargeTime = 3.5f;
+        private static readonly float maxChargeTime = 3.5f;
         private static float leapCooldownTime = 0f;
-        private static float leapCooldownDur = 2f;
-        private static float leapForceMultiplier = 1f;
+        private static readonly float leapCooldownDur = 2f;
+        private static readonly float leapForceMultiplier = 1f;
         private static bool leapCooldown = false;
-        private static float minStamina = 1;
-        private static float maxStamina = 6;
-        private static float upwardArcForce = 1f;
+        private static readonly float minStamina = 1;
+        private static readonly float maxStamina = 6;
+        private static readonly float upwardArcForce = 1f;
         private static bool isHolding = false;
 
         private static bool hasWallRunInAir = false;
-        private static float tiltLerpSpeed = 4f;
+        private static readonly float tiltLerpSpeed = 4f;
         private static float gripValue = 0f;
         private static bool isHorizRun = false;
         private static int spaceTapCount = 0;
@@ -53,19 +87,19 @@ namespace ParkourKnuckle
         private static bool isVerticalRun = false;
         private static bool hasWallRunVertical = false;
         private static float verticalGraceTimer = 0f;
-        private static float maxGraceTime = 0.2f;
+        private static readonly float maxGraceTime = 0.2f;
 
         private static bool isVaulting = false;
         private static Vector3 vaultTargetPos;
         private static float vaultTimer = 0f;
-        private static float vaultDuration = 0.2f;
+        private static readonly float vaultDuration = 2f;
 
         private static bool isSliding = false;
-        private static float minSlideSpeed = 6f;
+        private static readonly float minSlideSpeed = 6f;
         private static Vector3 slideDir;
         private static bool canSlide = true;
         private static float slideTime = 0f;
-        private static float slideDuration = 1.8f;
+        private static readonly float slideDuration = 1.8f;
         private static Vector3 slideStartPos;
         private static Vector3 slideTargetPos;
 
@@ -77,10 +111,16 @@ namespace ParkourKnuckle
         private static Vector3 rollTargetPos;
         private static Vector3 rollDir;
         private static float rollTimer = 0f;
-        private static float rollDur = 0.5f;
+        private static readonly float rollDur = 0.5f;
         private static bool cancelNextRollingFallDamage = false;
         private static float rollingFallDamageCancelExpiresAt = -1f;
         private const float rollingFallDamageCancelGrace = 0.2f;
+
+        public static float levelHighestHeight = 0f;
+        public static int highestMilestone = 0;
+        public static float liveRunHeight = 0f;
+
+        public static float previousCurrency = 0;
 
         private static void ArmRollingFallDamageCancel()
         {
@@ -149,9 +189,12 @@ namespace ParkourKnuckle
 
             if (Input.GetKeyUp(KeyCode.X) && !onCooldown && !isHorizRun && player.health > 0f)
             {
-                onCooldown = true;
-                targetRotation = player.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
-                isRotating = true;
+                if (Plugin.SkillConfigs.TryGetValue("QuickTurning", out var config) && config.Value)
+                {
+                    onCooldown = true;
+                    targetRotation = player.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+                    isRotating = true;
+                }
             }
 
             if (isRotating)
@@ -179,29 +222,34 @@ namespace ParkourKnuckle
 
             if (Input.GetKeyDown(KeyCode.G) && (isGrounded || isHolding) && !leapCooldown)
             {
-                if (isGrounded || isHolding)
+                if (Plugin.SkillConfigs.TryGetValue("Leaping", out var config) && config.Value)
                 {
-                    bool bothHandsReady = true;
-
-                    foreach (var hand in player.hands)
+                    if (isGrounded || isHolding)
                     {
-                        if (hand.gripStrength < minStamina)
+                        bool bothHandsReady = true;
+
+                        foreach (var hand in player.hands)
                         {
-                            bothHandsReady = false;
+                            if (hand.gripStrength < minStamina)
+                            {
+                                bothHandsReady = false;
+                            }
                         }
-                    }
 
-                    if (bothHandsReady)
-                    {
-                        chargeStartTime = Time.time;
-                        isCharging = true;
+                        if (bothHandsReady)
+                        {
+                            chargeStartTime = Time.time;
+                            isCharging = true;
+                        }
                     }
                 }
             }
 
+            float currentCharge = 0f;
+
             if (isCharging && Input.GetKey(KeyCode.G) && (isGrounded || isHolding) && !leapCooldown)
             {
-                float currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
+                currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
                 CL_CameraControl.Shake(currentCharge * Time.deltaTime * 0.025f);
 
                 foreach (var hand in player.hands)
@@ -212,67 +260,73 @@ namespace ParkourKnuckle
 
             if (Input.GetKeyUp(KeyCode.G) && isCharging && (isGrounded || isHolding) && !leapCooldown)
             {
-                if (!isGrounded && !isHolding)
+                if (Plugin.SkillConfigs.TryGetValue("Leaping", out var config) && config.Value)
                 {
+                    if (!isGrounded && !isHolding)
+                    {
+                        isCharging = false;
+                        return;
+                    }
+                    currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
+                    float chargeDuration = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
+                    float finalForce = chargeDuration * leapForceMultiplier;
+                    float finalCost = Mathf.CeilToInt(Mathf.Lerp(minStamina, maxStamina, chargeDuration / maxChargeTime));
+
+                    Vector3 leapDirection = player.cam.transform.forward + (Vector3.up * upwardArcForce);
+                    Vector3 leapVelocity = leapDirection.normalized * finalForce;
+
+                    player.SetDirectionalForce(leapVelocity);
+
+                    foreach (var hand in player.hands)
+                    {
+                        hand.gripStrength -= finalCost;
+                        if (hand.gripStrength < 0f)
+                        {
+                            hand.gripStrength = 0f;
+                        }
+
+                        if (hand.IsHolding())
+                        {
+                            hand.DropHand(true);
+                        }
+                    }
+
+                    leapCooldown = true;
                     isCharging = false;
-                    return;
                 }
-                float currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
-                float chargeDuration = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
-                float finalForce = chargeDuration * leapForceMultiplier;
-                float finalCost = Mathf.CeilToInt(Mathf.Lerp(minStamina, maxStamina, chargeDuration / maxChargeTime));
-
-                Vector3 leapDirection = player.cam.transform.forward + (Vector3.up * upwardArcForce);
-                Vector3 leapVelocity = leapDirection.normalized * finalForce;
-
-                player.SetDirectionalForce(leapVelocity);
-
-                foreach (var hand in player.hands)
-                {
-                    hand.gripStrength -= finalCost;
-                    if (hand.gripStrength < 0f)
-                    {
-                        hand.gripStrength = 0f;
-                    }
-
-                    if (hand.IsHolding())
-                    {
-                        hand.DropHand(true);
-                    }
-                }
-
-                leapCooldown = true;
-                isCharging = false;
             }
 
             if (Input.GetKeyDown(KeyCode.Space) && Input.GetKey(KeyCode.S))
             {
-                bool bothStamina = true;
-                foreach (var hand in player.hands)
+                if (Plugin.SkillConfigs.TryGetValue("WallKicking", out var config) && config.Value)
                 {
-                    if (hand.gripStrength < 1)
+                    bool bothStamina = true;
+                    foreach (var hand in player.hands)
                     {
-                        bothStamina = false;
-                    }
-                }
-
-                if (!isHolding && bothStamina)
-                {
-                    Vector3 backDirection = -player.transform.forward;
-
-                    if (Physics.Raycast(player.transform.position, backDirection, out RaycastHit hit, 1.2f))
-                    {
-                        Vector3 kickDir = hit.normal + (Vector3.up * 1.2f);
-                        float kickForce = 1.5f;
-
-                        player.SetDirectionalForce(kickDir.normalized * kickForce);
-
-                        CL_CameraControl.Shake(Time.deltaTime * 0.15f);
-
-                        foreach (var hand in player.hands)
+                        if (hand.gripStrength < 1)
                         {
-                            hand.gripStrength -= 1.0f;
-                            if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                            bothStamina = false;
+                        }
+                    }
+
+                    if (!isHolding && bothStamina)
+                    {
+                        Vector3 backDirection = -player.transform.forward;
+
+                        if (Physics.Raycast(player.transform.position, backDirection, out RaycastHit hit, 1.2f))
+                        {
+                            Vector3 kickDir = hit.normal + (Vector3.up * 1.2f);
+                            float kickForce = 1.5f;
+
+                            player.SetDirectionalForce(kickDir.normalized * kickForce);
+
+                            CL_CameraControl.Shake(Time.deltaTime * 0.15f);
+
+                            foreach (var hand in player.hands)
+                            {
+                                hand.gripStrength -= 1.0f;
+                                if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                            }
                         }
                     }
                 }
@@ -288,6 +342,7 @@ namespace ParkourKnuckle
                 player.transform.rotation = Quaternion.Euler(0, player.transform.eulerAngles.y, 0);
             }
 
+            bool canRun = true;
             bool runStamina = true;
 
             foreach (var hand in player.hands)
@@ -297,8 +352,13 @@ namespace ParkourKnuckle
 
                 if (hand.gripStrength <= 0f)
                 {
-                    runStamina = false;
+                    canRun = false;
                 }
+            }
+
+            if (!canRun)
+            {
+                runStamina = false;
             }
 
             if (Input.GetKeyDown(KeyCode.Space))
@@ -324,46 +384,49 @@ namespace ParkourKnuckle
 
             if (!hasWallRunInAir && isHoldingInput && (wallLeft || wallRight) && (isHorizRun || hasDoubleTapped))
             {
-                if (runStamina)
+                if (Plugin.SkillConfigs.TryGetValue("WallRunning", out var config) && config.Value)
                 {
-                    isHorizRun = true;
-                    spaceTapCount = 2;
-                    controller.enabled = false;
+                    if (runStamina)
+                    {
+                        isHorizRun = true;
+                        spaceTapCount = 2;
+                        controller.enabled = false;
 
-                    Vector3 wallNormal = wallLeft ? hitLeft.normal : hitRight.normal;
-                    Vector3 runDir = Vector3.Cross(wallNormal, Vector3.up).normalized;
+                        Vector3 wallNormal = wallLeft ? hitLeft.normal : hitRight.normal;
+                        Vector3 runDir = Vector3.Cross(wallNormal, Vector3.up).normalized;
 
-                    if (Physics.Raycast(player.transform.position, player.transform.forward, out RaycastHit hitFront, 1.2f))
+                        if (Physics.Raycast(player.transform.position, player.transform.forward, out RaycastHit hitFront, 1.2f))
+                        {
+                            isHorizRun = false;
+                            hasWallRunInAir = true;
+                            controller.enabled = true;
+                            return;
+                        }
+
+                        if (Vector3.Dot(runDir, player.transform.forward) < 0)
+                        {
+                            runDir = -runDir;
+                        }
+
+                        float tiltAmount = (Plugin.EnableParkourRotation.Value) ? (wallLeft ? -15f : 15f) : 0f;
+
+                        Quaternion lookRot = Quaternion.LookRotation(runDir) * Quaternion.Euler(0, 0, tiltAmount);
+                        player.transform.rotation = Quaternion.Slerp(player.transform.rotation, lookRot, Time.deltaTime * tiltLerpSpeed);
+                        player.SetDirectionalForce(((runDir * 0.8f) * (gripValue * 0.1f) + (Vector3.up * 0.1f)));
+
+                        CL_CameraControl.Shake(Time.deltaTime * 0.25f);
+                        foreach (var hand in player.hands)
+                        {
+                            hand.gripStrength -= Time.deltaTime * 2.5f;
+                            if (hand.gripStrength < 0) hand.gripStrength = 0;
+                        }
+                    }
+                    else
                     {
                         isHorizRun = false;
                         hasWallRunInAir = true;
                         controller.enabled = true;
-                        return;
                     }
-
-                    if (Vector3.Dot(runDir, player.transform.forward) < 0)
-                    {
-                        runDir = -runDir;
-                    }
-
-                    float tiltAmount = (Plugin.EnableParkourRotation.Value) ? (wallLeft ? -15f : 15f) : 0f;
-
-                    Quaternion lookRot = Quaternion.LookRotation(runDir) * Quaternion.Euler(0, 0, tiltAmount);
-                    player.transform.rotation = Quaternion.Slerp(player.transform.rotation, lookRot, Time.deltaTime * tiltLerpSpeed);
-                    player.SetDirectionalForce(((runDir * 0.8f) * (gripValue * 0.1f) + (Vector3.up * 0.1f)));
-
-                    CL_CameraControl.Shake(Time.deltaTime * 0.25f);
-                    foreach (var hand in player.hands)
-                    {
-                        hand.gripStrength -= Time.deltaTime * 2.5f;
-                        if (hand.gripStrength < 0) hand.gripStrength = 0;
-                    }
-                }
-                else
-                {
-                    isHorizRun = false;
-                    hasWallRunInAir = true;
-                    controller.enabled = true;
                 }
             }
             else
@@ -397,14 +460,20 @@ namespace ParkourKnuckle
                 }
             }
 
+            bool canVert = true;
             bool stamVertRun = true;
 
             foreach (var hand in player.hands)
             {
                 if (hand.gripStrength <= 0)
                 {
-                    stamVertRun = false;
+                    canVert = false;
                 }
+            }
+
+            if (!canVert)
+            {
+                stamVertRun = false;
             }
 
             if (isVerticalRun && !stamVertRun)
@@ -416,17 +485,20 @@ namespace ParkourKnuckle
 
             if (isVerticalRun && Input.GetKeyDown(KeyCode.Space) && verticalGraceTimer > 0 && verticalGraceTimer < maxGraceTime)
             {
-                float pushAwayForce = 1.5f;
-                float upwardArcForce = 1.5f;
+                if (Plugin.SkillConfigs.TryGetValue("WallRunBoost", out var config) && config.Value)
+                {
+                    float pushAwayForce = 1.5f;
+                    float upwardArcForce = 1.5f;
 
-                Vector3 jumpOffDir = ((hitRun.normal * pushAwayForce) * (gripValue * 0.1f)) + ((Vector3.up * upwardArcForce) * (gripValue * 0.1f));
-                player.SetDirectionalForce(jumpOffDir);
+                    Vector3 jumpOffDir = ((hitRun.normal * pushAwayForce) * (gripValue * 0.1f)) + ((Vector3.up * upwardArcForce) * (gripValue * 0.1f));
+                    player.SetDirectionalForce(jumpOffDir);
 
-                isVerticalRun = false;
-                verticalGraceTimer = 0;
-                hasWallRunVertical = true;
-                controller.enabled = true;
-                return;
+                    isVerticalRun = false;
+                    verticalGraceTimer = 0;
+                    hasWallRunVertical = true;
+                    controller.enabled = true;
+                    return;
+                }
             }
 
             if (isVerticalRun && verticalGraceTimer >= maxGraceTime)
@@ -440,9 +512,8 @@ namespace ParkourKnuckle
             if (isVaulting)
             {
                 vaultTimer += Time.deltaTime;
-                float progress = vaultTimer / vaultDuration;
 
-                player.transform.position = Vector3.Lerp(player.transform.position, vaultTargetPos, 2f);
+                player.transform.position = Vector3.Lerp(player.transform.position, vaultTargetPos, vaultDuration);
 
                 if (Vector3.Distance(player.transform.position, vaultTargetPos) < 0.1f)
                 {
@@ -455,92 +526,98 @@ namespace ParkourKnuckle
 
             if (isHoldingRun && !hasWallRunVertical && wallFront && (!hasWallRunVertical || isVerticalRun) && (verticalGraceTimer == 0f))
             {
-                if (!isVerticalRun && !hasDoubleTappedRun)
-                { }
-                else
+                if (Plugin.SkillConfigs.TryGetValue("VerticalWallRunning", out var config) && config.Value)
                 {
-                    float wallAngle = Vector3.Angle(hitRun.normal, Vector3.up);
-
-                    if (runStamina && wallAngle > 80f && wallAngle < 100f)
+                    if (!isVerticalRun && !hasDoubleTappedRun)
+                    { }
+                    else
                     {
-                        isVerticalRun = true;
-                        spaceTapCount = 2;
-                        controller.enabled = false;
+                        float wallAngle = Vector3.Angle(hitRun.normal, Vector3.up);
 
-                        Vector3 faceWallDir = -hitRun.normal;
-
-                        Vector3 ledgeCheckPos = player.transform.position + (Vector3.up * 1.5f);
-                        bool wallAbove = Physics.Raycast(ledgeCheckPos, faceWallDir, 0.25f);
-
-                        Quaternion climbRot = Quaternion.LookRotation(Vector3.up, hitRun.normal);
-
-                        if (wallAbove && (!Plugin.EnableParkourRotation.Value || Quaternion.Angle(player.transform.rotation, climbRot) < 25f))
+                        if (runStamina && wallAngle > 80f && wallAngle < 100f)
                         {
-                            if (Physics.SphereCast((player.transform.position + (Vector3.up * 1.0f)), 0.3f, Vector3.up, out RaycastHit hitAboveRun, 0.7f))
+                            isVerticalRun = true;
+                            spaceTapCount = 2;
+                            controller.enabled = false;
+
+                            Vector3 faceWallDir = -hitRun.normal;
+
+                            Vector3 ledgeCheckPos = player.transform.position + (Vector3.up * 1.5f);
+                            bool wallAbove = Physics.Raycast(ledgeCheckPos, faceWallDir, 0.25f);
+
+                            Quaternion climbRot = Quaternion.LookRotation(Vector3.up, hitRun.normal);
+
+                            if (wallAbove && (!Plugin.EnableParkourRotation.Value || Quaternion.Angle(player.transform.rotation, climbRot) < 25f))
                             {
-                                isVaulting = false;
-                                hasWallRunVertical = true;
-                                isVerticalRun = false;
-                                controller.enabled = true;
-                                return;
-                            }
-                        }
-
-                        if (!wallAbove)
-                        {
-
-                            if (!Physics.Raycast(ledgeCheckPos, faceWallDir, 1f))
-                            {
-                                Vector3 rayStart = ledgeCheckPos + (faceWallDir * 1f);
-
-                                if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit ledgeHit, 2f))
+                                if (Physics.SphereCast((player.transform.position + (Vector3.up * 1.0f)), 0.3f, Vector3.up, out _, 0.7f))
                                 {
+                                    isVaulting = false;
+                                    hasWallRunVertical = true;
+                                    isVerticalRun = false;
+                                    controller.enabled = true;
+                                    return;
+                                }
+                            }
 
-                                    Vector3 backCheckOrigin = ledgeHit.point + (Vector3.up * 0.5f);
-                                    if (Physics.Raycast(backCheckOrigin, -faceWallDir, out RaycastHit wallThickness, 1.5f))
+                            if (!wallAbove)
+                            {
+
+                                if (!Physics.Raycast(ledgeCheckPos, faceWallDir, 1f))
+                                {
+                                    Vector3 rayStart = ledgeCheckPos + (faceWallDir * 1f);
+
+                                    if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit ledgeHit, 2f))
                                     {
-                                        if (wallThickness.distance < 0.2f) return;
-                                    }
 
-                                    if (!Physics.SphereCast(ledgeHit.point + (Vector3.up * 0.1f), 0.3f, Vector3.up, out RaycastHit ceilCheck, 1.8f))
-                                    {
-                                        vaultTargetPos = ledgeHit.point + (Vector3.up * 1.1f);
+                                        Vector3 backCheckOrigin = ledgeHit.point + (Vector3.up * 0.5f);
+                                        if (Physics.Raycast(backCheckOrigin, -faceWallDir, out RaycastHit wallThickness, 1.5f))
+                                        {
+                                            if (wallThickness.distance < 0.2f) return;
+                                        }
 
-                                        isVaulting = true;
-                                        vaultTimer = 0;
-                                        isVerticalRun = false;
-                                        hasWallRunVertical = true;
-                                        controller.enabled = false;
-                                        return;
+                                        if (!Physics.SphereCast(ledgeHit.point + (Vector3.up * 0.1f), 0.3f, Vector3.up, out _, 1.8f))
+                                        {
+                                            vaultTargetPos = ledgeHit.point + (Vector3.up * 1.1f);
+
+                                            isVaulting = true;
+                                            vaultTimer = 0;
+                                            isVerticalRun = false;
+                                            hasWallRunVertical = true;
+                                            controller.enabled = false;
+                                            return;
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        if (Plugin.EnableParkourRotation.Value)
-                        {
-                            player.transform.rotation = Quaternion.Slerp(player.transform.rotation, climbRot, Time.deltaTime * 10f);
-                        }
+                            if (Plugin.EnableParkourRotation.Value)
+                            {
+                                player.transform.rotation = Quaternion.Slerp(player.transform.rotation, climbRot, Time.deltaTime * 10f);
+                            }
 
-                        Vector3 climbVelocity = (Vector3.up * 0.4f) * (gripValue * 0.15f);
-                        player.SetDirectionalForce(climbVelocity);
+                            Vector3 climbVelocity = (Vector3.up * 0.4f) * (gripValue * 0.15f);
+                            player.SetDirectionalForce(climbVelocity);
 
-                        CL_CameraControl.Shake(Time.deltaTime * 0.4f);
-                        foreach (var hand in player.hands)
-                        {
-                            hand.gripStrength -= Time.deltaTime * 4.5f;
-                            if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                            CL_CameraControl.Shake(Time.deltaTime * 0.4f);
+                            foreach (var hand in player.hands)
+                            {
+                                hand.gripStrength -= Time.deltaTime * 4.5f;
+                                if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                            }
+                            return;
                         }
-                        return;
                     }
                 }
             }
 
             if (!isGrounded && !isVerticalRun && !isVaulting && verticalGraceTimer <= 0 && spaceTapTimer <= 0)
             {
-                if (controller.enabled)
+                if (Plugin.SkillConfigs.TryGetValue("VerticalWallRunning", out var config) && config.Value)
                 {
-                    hasWallRunVertical = true;
+                    if (controller.enabled)
+                    {
+                        hasWallRunVertical = true;
+                    }
                 }
             }
 
@@ -557,18 +634,21 @@ namespace ParkourKnuckle
 
             if (isGrounded && player.IsCrouching() && !isSliding && canSlide)
             {
-                if (currentSpeed >= minSlideSpeed && isMovingForward)
+                if (Plugin.SkillConfigs.TryGetValue("Sliding", out var config) && config.Value)
                 {
-                    isSliding = true;
-                    canSlide = false;
-                    slideDir = horizontalVel.normalized;
-                    slideTime = 0f;
+                    if (currentSpeed >= minSlideSpeed && isMovingForward)
+                    {
+                        isSliding = true;
+                        canSlide = false;
+                        slideDir = horizontalVel.normalized;
+                        slideTime = 0f;
 
-                    slideStartPos = player.transform.position;
-                    slideTargetPos = slideStartPos + (slideDir * 10f);
+                        slideStartPos = player.transform.position;
+                        slideTargetPos = slideStartPos + (slideDir * 10f);
 
-                    controller.enabled = false;
-                    CL_CameraControl.Shake(Time.deltaTime * 0.1f);
+                        controller.enabled = false;
+                        CL_CameraControl.Shake(Time.deltaTime * 0.1f);
+                    }
                 }
             }
 
@@ -576,37 +656,46 @@ namespace ParkourKnuckle
             {
                 if (Input.GetKeyDown(KeyCode.Space))
                 {
-
-                    float slideRemnant = 1f - (slideTime / slideDuration);
-                    float lungeForwardPower = 1f * slideRemnant;
-                    float lungUpwardPower = 1.5f * slideRemnant;
-                    Vector3 lungeVelocity = (slideDir * lungeForwardPower) + (Vector3.up * lungUpwardPower);
-
-                    float staminaCost = lungeVelocity.magnitude * 1f;
-                    bool hasEnoughStamina = true;
-                    foreach (var hand in player.hands)
+                    if (Plugin.SkillConfigs.TryGetValue("SlideJumping", out var config) && config.Value)
                     {
-                        if (hand.gripStrength < staminaCost)
-                        {
-                            hasEnoughStamina = false;
-                            break;
-                        }
-                    }
 
-                    if (hasEnoughStamina)
-                    {
-                        player.SetDirectionalForce(lungeVelocity);
-                        CL_CameraControl.Shake(lungeVelocity.magnitude * Time.deltaTime * 0.1f);
+                        float slideRemnant = 1f - (slideTime / slideDuration);
+                        float lungeForwardPower = 1f * slideRemnant;
+                        float lungUpwardPower = 1.5f * slideRemnant;
+                        Vector3 lungeVelocity = (slideDir * lungeForwardPower) + (Vector3.up * lungUpwardPower);
 
+                        float staminaCost = lungeVelocity.magnitude * 1f;
+                        bool slideStaminaReady = true;
+                        bool hasEnoughStamina = true;
                         foreach (var hand in player.hands)
                         {
-                            hand.gripStrength -= staminaCost;
-                            if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                            if (hand.gripStrength < staminaCost)
+                            {
+                                slideStaminaReady = false;
+                                break;
+                            }
                         }
 
-                        isSliding = false;
-                        controller.enabled = true;
-                        return;
+                        if (!slideStaminaReady)
+                        {
+                            hasEnoughStamina = false;
+                        }
+
+                        if (hasEnoughStamina)
+                        {
+                            player.SetDirectionalForce(lungeVelocity);
+                            CL_CameraControl.Shake(lungeVelocity.magnitude * Time.deltaTime * 0.1f);
+
+                            foreach (var hand in player.hands)
+                            {
+                                hand.gripStrength -= staminaCost;
+                                if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                            }
+
+                            isSliding = false;
+                            controller.enabled = true;
+                            return;
+                        }
                     }
                 }
 
@@ -650,22 +739,25 @@ namespace ParkourKnuckle
 
             if (!wasGrounded && isGrounded)
             {
-                float fallDistance = startY - player.transform.position.y;
-
-                if (fallDistance >= 15 && player.IsCrouching() && !isRotatingRoll)
+                if (Plugin.SkillConfigs.TryGetValue("Rolling", out var config) && config.Value)
                 {
-                    isRotatingRoll = true;
-                    rollTimer = 0f;
-                    startRotationRoll = player.transform.rotation;
-                    controller.enabled = false;
-                    ArmRollingFallDamageCancel();
+                    float fallDistance = startY - player.transform.position.y;
 
-                    rollDir = player.transform.forward;
-                    rollDir.y = 0;
-                    rollDir.Normalize();
+                    if (fallDistance >= 15 && player.IsCrouching() && !isRotatingRoll)
+                    {
+                        isRotatingRoll = true;
+                        rollTimer = 0f;
+                        startRotationRoll = player.transform.rotation;
+                        controller.enabled = false;
+                        ArmRollingFallDamageCancel();
 
-                    rollStartPos = player.transform.position;
-                    rollTargetPos = rollStartPos + (rollDir * 5f);
+                        rollDir = player.transform.forward;
+                        rollDir.y = 0;
+                        rollDir.Normalize();
+
+                        rollStartPos = player.transform.position;
+                        rollTargetPos = rollStartPos + (rollDir * 5f);
+                    }
                 }
             }
 
@@ -709,6 +801,60 @@ namespace ParkourKnuckle
             }
 
             wasGrounded = isGrounded;
+
+            float MaxHeight = Plugin.CurrencyConfigs["MaxHeight"].Value;
+            float HeightCurrency = Plugin.CurrencyConfigs["HeightCurrency"].Value;
+            
+            int currentMilestone = (int)(levelHighestHeight / 100);
+            levelHighestHeight = player.transform.position.y;
+
+            if (player.health <= 0)
+            {
+                if (levelHighestHeight > MaxHeight)
+                {
+                    Plugin.CurrencyConfigs["MaxHeight"].Value = levelHighestHeight;
+                }
+
+                liveRunHeight = 0f;
+                highestMilestone = 0;
+                return;
+            }
+
+            if (liveRunHeight < MaxHeight)
+            {
+
+                liveRunHeight = MaxHeight;
+            }
+
+            int bonusPoints = 0;
+
+            if (currentMilestone > highestMilestone)
+            {
+                int gainedMilestone = currentMilestone - highestMilestone;
+
+                previousCurrency = HeightCurrency;
+
+                Plugin.CurrencyConfigs["HeightCurrency"].Value += gainedMilestone * 10f;
+
+                if (levelHighestHeight > liveRunHeight && MaxHeight >= 100)
+                {
+                    int hundredsPlace = (int)(levelHighestHeight / 100);
+
+                    bonusPoints += hundredsPlace;
+
+                    if (bonusPoints > 10)
+                    {
+                        bonusPoints = 10;
+                    }
+
+                    Plugin.CurrencyConfigs["HeightCurrency"].Value += bonusPoints;
+                    liveRunHeight = levelHighestHeight;
+                }
+
+                ParkourUI.Instance.StartCoroutine(ParkourUI.Instance.AnimateCurrencyGain((int)(previousCurrency), gainedMilestone * 10 + bonusPoints));
+                
+                highestMilestone = currentMilestone;
+            }
         }
     }
 
@@ -725,6 +871,47 @@ namespace ParkourKnuckle
 
             __result = false;
             return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(EventSystem), "Update")]
+    public class WorldUpdate
+    {
+        private static bool playerExisted = false;
+        private static readonly float levelHighestHeight = PlayerModifierPatch.levelHighestHeight;
+
+        [HarmonyPrefix]
+        public static void Postfix()
+        {
+            var player = ENT_Player.playerObject;
+            float MaxHeight = Plugin.CurrencyConfigs["MaxHeight"].Value;
+
+            if (player != null)
+            {
+                if (!playerExisted)
+                {
+                    playerExisted = true;
+                }
+            }
+
+            if (player == null && playerExisted)
+            {
+                if (levelHighestHeight > MaxHeight)
+                {
+                    Plugin.CurrencyConfigs["MaxHeight"].Value = levelHighestHeight;
+                }
+
+                PlayerModifierPatch.liveRunHeight = 0f;
+                PlayerModifierPatch.highestMilestone = 0;
+                playerExisted = false;
+            }
+
+            if (ParkourUI.hasPurchased)
+            {
+                Plugin.CurrencyConfigs["HeightCurrency"].Value = ParkourUI.newCurrencyAmount;
+                ParkourUI.hasPurchased = false;
+                ParkourUI.UpdateCurrencyDisplay();
+            }
         }
     }
 }
