@@ -1,6 +1,6 @@
 name: "Parkour Knuckle Issue Form"
 description: File a bug report or ask for specific additions, or just ask a general question about the mod.
-title: "[Bug]: "
+title: "[Issue]: "
 body:
   - type: markdown
     attributes:
