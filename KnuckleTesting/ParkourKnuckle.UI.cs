@@ -51,6 +51,13 @@ namespace ParkourKnuckle.UI
         private TextMeshProUGUI mapLoadingText;
         private TextMeshProUGUI seedLoadingText;
         private TextMeshProUGUI idLoadingText;
+        private GameObject wallRunFadeHelper;
+        private GameObject wallRunLeft;
+        private GameObject wallRunRight;
+        private GameObject wallRunUp;
+        private CanvasGroup wallRunLeftGroup = null;
+        private CanvasGroup wallRunRightGroup = null;
+        private CanvasGroup wallRunUpGroup = null;
 
         private GameObject optionsContentObj;
         private GameObject forwardButtonObj;
@@ -60,6 +67,7 @@ namespace ParkourKnuckle.UI
         private Toggle cameraRotationToggle;
         private Toggle cameraFOVToggle;
         private Toggle cameraShakeToggle;
+        private Toggle uiGlowToggle;
         private Button resetProgressButton;
 
         private GameObject descriptionPanelObj;
@@ -133,6 +141,8 @@ namespace ParkourKnuckle.UI
         private const float wobbleMagnitude = 4.0f;
         private const float noiseSpacing = 100.0f;
 
+        private const float FADE_SPEED = 5f;
+
         private readonly Dictionary<string, Vector2> nodeOriginPositions = new Dictionary<string, Vector2>();
         private RectTransform quickTurnRect;
         private readonly Dictionary<string, Vector2> lineOriginPositions = new Dictionary<string, Vector2>();
@@ -182,6 +192,11 @@ namespace ParkourKnuckle.UI
                 {
                     abilityTimesContainer.SetActive(true);
                 }
+
+                if (wallRunFadeHelper != null)
+                {
+                    wallRunFadeHelper.SetActive(true);
+                }
             }
             else if (!isPlayerObjectPresent && wasPlayerObjectPresent)
             {
@@ -201,6 +216,11 @@ namespace ParkourKnuckle.UI
                 if (abilityTimesContainer != null)
                 {
                     abilityTimesContainer.SetActive(false);
+                }
+
+                if (wallRunFadeHelper != null)
+                {
+                    wallRunFadeHelper.SetActive(false);
                 }
             }
 
@@ -252,6 +272,52 @@ namespace ParkourKnuckle.UI
                 } else if (currencyIconObj != null && (ENT_Player.playerObject.health > 0 && !cachedGameManager.isPaused))
                 {
                     currencyIconObj.SetActive(false);
+                }
+
+                if (wallRunFadeHelper != null && Plugin.EnableWallRunHelper.Value)
+                {
+                    if (wallRunLeftGroup != null)
+                    {
+                        bool shouldShowLeft = PlayerModifierPatch.canRun && PlayerModifierPatch.wallLeft && !PlayerModifierPatch.hasWallRunInAir && !PlayerModifierPatch.isHorizRun;
+                        float targetAlphaLeft = shouldShowLeft ? 1f : 0f;
+                        wallRunLeftGroup.alpha = Mathf.MoveTowards(wallRunLeftGroup.alpha, targetAlphaLeft, FADE_SPEED * Time.deltaTime);
+                    }
+
+                    if (wallRunRightGroup != null)
+                    {
+                        bool shouldShowRight = PlayerModifierPatch.canRun && PlayerModifierPatch.wallRight && !PlayerModifierPatch.hasWallRunInAir && !PlayerModifierPatch.isHorizRun;
+                        float targetAlphaRight = shouldShowRight ? 1f : 0f;
+                        wallRunRightGroup.alpha = Mathf.MoveTowards(wallRunRightGroup.alpha, targetAlphaRight, FADE_SPEED * Time.deltaTime);
+                    }
+
+                    if (wallRunUpGroup != null)
+                    {
+                        bool shouldShowUp = PlayerModifierPatch.canVert && PlayerModifierPatch.wallFront && !PlayerModifierPatch.hasWallRunVertical && !PlayerModifierPatch.isVerticalRun;
+                        float targetAlphaUp = shouldShowUp ? 1f : 0f;
+                        wallRunUpGroup.alpha = Mathf.MoveTowards(wallRunUpGroup.alpha, targetAlphaUp, FADE_SPEED * Time.deltaTime);
+                    }
+
+                    if (cachedGameManager != null)
+                    {
+                        if (cachedGameManager.isPaused)
+                        {
+                            wallRunFadeHelper.SetActive(false);
+                        } else if (ENT_Player.playerObject.health <= 0)
+                        {
+                            wallRunFadeHelper.SetActive(false);
+                        } else
+                        {
+                            wallRunFadeHelper.SetActive(true);
+                        }
+                    }
+                } else if (wallRunFadeHelper != null && !Plugin.EnableWallRunHelper.Value)
+                {
+                    wallRunFadeHelper.SetActive(false);
+                }
+
+                if (openButtonObj.activeSelf)
+                {
+                    openButtonObj.SetActive(false);
                 }
             }
 
@@ -482,6 +548,7 @@ namespace ParkourKnuckle.UI
             currencyAddObj = uiInstance.transform.Find("CurrencyAdd")?.gameObject;
             abilityTimesContainer = uiInstance.transform.Find("AbilityTimes")?.gameObject;
             loadingScreen = uiInstance.transform.Find("LoadingScreen")?.gameObject;
+            wallRunFadeHelper = uiInstance.transform.Find("WallRunHelper")?.gameObject;
 
             if (skillTreePanel != null)
             {
@@ -529,6 +596,7 @@ namespace ParkourKnuckle.UI
                     cameraRotationToggle = optionsContentObj.transform.Find("EPRToggle")?.GetComponent<Toggle>();
                     cameraFOVToggle = optionsContentObj.transform.Find("EPFToggle")?.GetComponent<Toggle>();
                     cameraShakeToggle = optionsContentObj.transform.Find("EPSToggle")?.GetComponent<Toggle>();
+                    uiGlowToggle = optionsContentObj.transform.Find("EWRGToggle")?.GetComponent<Toggle>();
                     resetProgressButton = optionsContentObj.transform.Find("ResetButton")?.GetComponent<Button>();
                 }
 
@@ -642,6 +710,22 @@ namespace ParkourKnuckle.UI
                 idLoadingText = loadingScreen.transform.Find("MapIDText").GetComponent<TextMeshProUGUI>();
                 idLoadingText.text = "";
                 loadingScreen.SetActive(false);
+            }
+
+            if (wallRunFadeHelper != null)
+            {
+                wallRunFadeHelper.SetActive(false);
+                wallRunLeft = wallRunFadeHelper.transform.Find("WallRunLeft")?.gameObject;
+                wallRunRight = wallRunFadeHelper.transform.Find("WallRunRight")?.gameObject;
+                wallRunUp = wallRunFadeHelper.transform.Find("WallRunUp")?.gameObject;
+
+                if (wallRunLeft != null) wallRunLeftGroup = wallRunLeft.GetComponent<CanvasGroup>() ?? wallRunLeft.AddComponent<CanvasGroup>();
+                if (wallRunRight != null) wallRunRightGroup = wallRunRight.GetComponent<CanvasGroup>() ?? wallRunRight.AddComponent<CanvasGroup>();
+                if (wallRunUp != null) wallRunUpGroup = wallRunUp.GetComponent<CanvasGroup>() ?? wallRunUp.AddComponent<CanvasGroup>();
+
+                wallRunLeftGroup.alpha = 0f;
+                wallRunRightGroup.alpha = 0f;
+                wallRunUpGroup.alpha = 0f;
             }
         }
 
@@ -794,6 +878,14 @@ namespace ParkourKnuckle.UI
                 });
             }
 
+            if (uiGlowToggle != null)
+            {
+                uiGlowToggle.isOn = Plugin.EnableWallRunHelper.Value;
+                uiGlowToggle.onValueChanged.AddListener(isChecked => {
+                    Plugin.EnableWallRunHelper.Value = isChecked;
+                });
+            }
+
             resetProgressButton?.onClick.AddListener(ShowResetConfirmPopup);
             purchaseButton?.onClick.AddListener(OnPurchasePressed);
         }
@@ -829,6 +921,10 @@ namespace ParkourKnuckle.UI
                 cameraShakeToggle.isOn = Plugin.EnableParkourShake.Value;
             }
 
+            if (!showPerksTree && uiGlowToggle != null)
+            {
+                uiGlowToggle.isOn = Plugin.EnableWallRunHelper.Value;
+            }
 
             if (contentTransform != null)
                 StartCoroutine(FadePanel(contentTransform.gameObject, showPerksTree, 0.3f));

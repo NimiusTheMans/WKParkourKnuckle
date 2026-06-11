@@ -20,6 +20,7 @@ namespace ParkourKnuckle
         public static ConfigEntry<bool> EnableParkourRotation;
         public static ConfigEntry<bool> EnableParkourFOV;
         public static ConfigEntry<bool> EnableParkourShake;
+        public static ConfigEntry<bool> EnableWallRunHelper;
         public static bool isUIVisible = false;
 
         public static ConfigFile ProgressionFile;
@@ -29,6 +30,7 @@ namespace ParkourKnuckle
             EnableParkourRotation = Config.Bind("Camera Settings", "Use Parkour Rotation", true, "Determines whether the camera will tilt and rotate differently when doing parkour actions.");
             EnableParkourFOV = Config.Bind("Camera Settings", "Use Parkour FOV", true, "Determines whether the camera will zoom in and out during specific parkour actions.");
             EnableParkourShake = Config.Bind("Camera Settings", "Use Parkour Shake", true, "Determines whether the camera will shake during specific parkour actions.");
+            EnableWallRunHelper = Config.Bind("UI Settings", "Use the Wall Run Helper", false, "When a wall run is able to be performed, the sides of your screen will glow.");
 
             string saveSkillPath = Path.Combine(Paths.ConfigPath, "parkourprogress.cfg");
             ProgressionFile = new ConfigFile(saveSkillPath, true);
@@ -77,18 +79,23 @@ namespace ParkourKnuckle
         private static readonly float upwardArcForce = 1f;
         private static bool isHolding = false;
 
-        private static bool hasWallRunInAir = false;
+        public static bool hasWallRunInAir = false;
         private static readonly float tiltLerpSpeed = 4f;
         private static float gripValue = 0f;
-        private static bool isHorizRun = false;
+        public static bool isHorizRun = false;
         private static int spaceTapCount = 0;
         private static float spaceTapTimer = 0f;
         private const float doubleTapWindow = 0.3f;
+        public static bool wallLeft;
+        public static bool wallRight;
+        public static bool canRun;
 
-        private static bool isVerticalRun = false;
-        private static bool hasWallRunVertical = false;
+        public static bool isVerticalRun = false;
+        public static bool hasWallRunVertical = false;
         private static float verticalGraceTimer = 0f;
         private static readonly float maxGraceTime = 0.2f;
+        public static bool wallFront;
+        public static bool canVert;
 
         private static bool isVaulting = false;
         private static Vector3 vaultTargetPos;
@@ -385,7 +392,7 @@ namespace ParkourKnuckle
                 controller.enabled = true;
             }
 
-            bool canRun = true;
+            canRun = true;
             bool runStamina = true;
 
             foreach (var hand in player.hands)
@@ -419,8 +426,8 @@ namespace ParkourKnuckle
                 spaceTapCount = 0;
             }
 
-            bool wallLeft = Physics.Raycast(player.transform.position, -player.transform.right, out RaycastHit hitLeft, 1.2f);
-            bool wallRight = Physics.Raycast(player.transform.position, player.transform.right, out RaycastHit hitRight, 1.2f);
+            wallLeft = Physics.Raycast(player.transform.position, -player.transform.right, out RaycastHit hitLeft, 1.2f);
+            wallRight = Physics.Raycast(player.transform.position, player.transform.right, out RaycastHit hitRight, 1.2f);
 
             bool hasDoubleTapped = spaceTapCount >= 2;
             bool isHoldingInput = Input.GetKey(KeyCode.Space) && (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.D));
@@ -469,11 +476,8 @@ namespace ParkourKnuckle
 
                         foreach (var hand in player.hands)
                         {
-                            if (!isConsumableUltimate)
-                            {
-                                hand.gripStrength -= Time.deltaTime * 2.5f;
-                                if (hand.gripStrength < 0) hand.gripStrength = 0;
-                            }
+                            hand.gripStrength -= Time.deltaTime * (2.5f / ((roidedCount / 8) + 1));
+                            if (hand.gripStrength < 0) hand.gripStrength = 0;
                         }
                     }
                     else
@@ -498,7 +502,7 @@ namespace ParkourKnuckle
                 isHorizRun = false;
             }
 
-            bool wallFront = Physics.Raycast(player.transform.position, player.transform.forward, out RaycastHit hitRun, 1.2f);
+            wallFront = Physics.Raycast(player.transform.position, player.transform.forward, out RaycastHit hitRun, 1.2f);
             bool isHoldingRun = Input.GetKey(KeyCode.Space) && Input.GetKey(KeyCode.W);
 
             bool hasDoubleTappedRun = spaceTapCount >= 2;
@@ -515,7 +519,7 @@ namespace ParkourKnuckle
                 }
             }
 
-            bool canVert = true;
+            canVert = true;
             bool stamVertRun = true;
 
             foreach (var hand in player.hands)
@@ -679,11 +683,8 @@ namespace ParkourKnuckle
 
                             foreach (var hand in player.hands)
                             {
-                                if (!isConsumableUltimate)
-                                {
-                                    hand.gripStrength -= Time.deltaTime * 4.5f;
-                                    if (hand.gripStrength < 0f) hand.gripStrength = 0f;
-                                }
+                                hand.gripStrength -= Time.deltaTime * (4.5f / ((roidedCount / 8) + 1));
+                                if (hand.gripStrength < 0f) hand.gripStrength = 0f;
                             }
                             return;
                         }
@@ -1006,9 +1007,7 @@ namespace ParkourKnuckle
                     var buffNames = activeList?.SelectMany(c => c?.buffs ?? new List<BuffContainer.Buff>()).Where(b => b != null && !string.IsNullOrEmpty(b.id)).Select(b => b.id);
 
                     PlayerModifierPatch.isConsumableUltimate = buffNames != null && buffNames.Any(name => name == "pilled" || name == "roided");
-                    PlayerModifierPatch.roidedCount = buffNames != null ? buffNames.Count(name => name == "roided") : 0;
-
-                    Debug.Log($"{PlayerModifierPatch.isConsumableUltimate}, {PlayerModifierPatch.roidedCount}");
+                    PlayerModifierPatch.roidedCount = Mathf.Min(buffNames != null ? buffNames.Count(name => name == "roided") : 0, 5);
                 }
             }
 
