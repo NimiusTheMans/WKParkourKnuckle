@@ -5,6 +5,7 @@ using ParkourKnuckle.UI;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -17,21 +18,20 @@ namespace ParkourKnuckle
         private Harmony _harmony;
 
         public static ConfigEntry<bool> EnableParkourRotation;
+        public static ConfigEntry<bool> EnableParkourFOV;
+        public static ConfigEntry<bool> EnableParkourShake;
         public static bool isUIVisible = false;
 
         public static ConfigFile ProgressionFile;
-        public static Dictionary<string, ConfigEntry<bool>> SkillConfigs = new Dictionary<string, ConfigEntry<bool>>();
-        public static ConfigFile CurrencyFile;
-        public static Dictionary<string, ConfigEntry<float>> CurrencyConfigs = new Dictionary<string, ConfigEntry<float>>();
-
+        public static Dictionary<string, ConfigEntryBase> SkillConfigs = new Dictionary<string, ConfigEntryBase>();
         void Awake()
         {
             EnableParkourRotation = Config.Bind("Camera Settings", "Use Parkour Rotation", true, "Determines whether the camera will tilt and rotate differently when doing parkour actions.");
+            EnableParkourFOV = Config.Bind("Camera Settings", "Use Parkour FOV", true, "Determines whether the camera will zoom in and out during specific parkour actions.");
+            EnableParkourShake = Config.Bind("Camera Settings", "Use Parkour Shake", true, "Determines whether the camera will shake during specific parkour actions.");
 
             string saveSkillPath = Path.Combine(Paths.ConfigPath, "parkourprogress.cfg");
             ProgressionFile = new ConfigFile(saveSkillPath, true);
-            string saveCurrencyPath = Path.Combine(Paths.ConfigPath, "parkourprogress.cfg");
-            CurrencyFile = new ConfigFile(saveCurrencyPath, true);
 
             SkillConfigs["QuickTurning"] = ProgressionFile.Bind("Progression", "QuickTurning", false, "");
             SkillConfigs["Sliding"] = ProgressionFile.Bind("Progression", "Sliding", false, "");
@@ -42,8 +42,8 @@ namespace ParkourKnuckle
             SkillConfigs["WallRunning"] = ProgressionFile.Bind("Progression", "WallRunning", false, "");
             SkillConfigs["VerticalWallRunning"] = ProgressionFile.Bind("Progression", "VerticalWallRunning", false, "");
             SkillConfigs["WallRunBoost"] = ProgressionFile.Bind("Progression", "WallRunBoost", false, "");
-            CurrencyConfigs["HeightCurrency"] = CurrencyFile.Bind("Currency", "HeightCurrency", 0f, "");
-            CurrencyConfigs["MaxHeight"] = CurrencyFile.Bind("Currency", "MaxHeight", 0f, "");
+            SkillConfigs["HeightCurrency"] = ProgressionFile.Bind("Currency", "HeightCurrency", 0f, "");
+            SkillConfigs["MaxHeight"] = ProgressionFile.Bind("Currency", "MaxHeight", 0f, "");
 
             this._harmony = new Harmony("com.nimius.parkourknuckle");
             this._harmony.PatchAll();
@@ -60,17 +60,18 @@ namespace ParkourKnuckle
         private static Quaternion targetRotation;
         private static bool isRotating = false;
         private static readonly float turnSpeed = 24f;
-        private static bool onCooldown = false;
-        private static readonly float CooldownDur = 0.2f;
-        private static float CooldownTime = 0f;
+        public static bool onCooldown = false;
+        public static readonly float CooldownDur = 0.2f;
+        public static float CooldownTime = 0f;
 
-        private static float chargeStartTime;
-        private static bool isCharging;
-        private static readonly float maxChargeTime = 3.5f;
-        private static float leapCooldownTime = 0f;
-        private static readonly float leapCooldownDur = 2f;
+        public static float chargeStartTime;
+        public static bool isCharging;
+        public static float currentCharge;
+        public static readonly float maxChargeTime = 3.5f;
+        public static float leapCooldownTime = 0f;
+        public static readonly float leapCooldownDur = 2f;
         private static readonly float leapForceMultiplier = 1f;
-        private static bool leapCooldown = false;
+        public static bool leapCooldown = false;
         private static readonly float minStamina = 1;
         private static readonly float maxStamina = 6;
         private static readonly float upwardArcForce = 1f;
@@ -116,9 +117,11 @@ namespace ParkourKnuckle
         private static float rollingFallDamageCancelExpiresAt = -1f;
         private const float rollingFallDamageCancelGrace = 0.2f;
 
-        public static float levelHighestHeight = 0f;
+        public static float levelHighestHeight;
         public static int highestMilestone = 0;
         public static float liveRunHeight = 0f;
+        public static bool isConsumableUltimate = false;
+        public static int roidedCount = 0;
 
         public static float previousCurrency = 0;
 
@@ -189,7 +192,7 @@ namespace ParkourKnuckle
 
             if (Input.GetKeyUp(KeyCode.X) && !onCooldown && !isHorizRun && player.health > 0f)
             {
-                if (Plugin.SkillConfigs.TryGetValue("QuickTurning", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["QuickTurning"]).Value)
                 {
                     onCooldown = true;
                     targetRotation = player.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
@@ -199,7 +202,7 @@ namespace ParkourKnuckle
 
             if (isRotating)
             {
-                player.transform.rotation = Quaternion.Slerp(player.transform.rotation, targetRotation, Time.deltaTime * turnSpeed);
+                player.transform.rotation = Quaternion.Slerp(player.transform.rotation, targetRotation, (Time.deltaTime * (turnSpeed * ((roidedCount / 2) + 1))));
 
                 if (Quaternion.Angle(player.transform.rotation, targetRotation) < 0.5f)
                 {
@@ -209,7 +212,7 @@ namespace ParkourKnuckle
 
             if (leapCooldown)
             {
-                if (isGrounded)
+                if (isGrounded || isHolding)
                 {
                     leapCooldownTime += Time.deltaTime;
                 }
@@ -222,7 +225,7 @@ namespace ParkourKnuckle
 
             if (Input.GetKeyDown(KeyCode.G) && (isGrounded || isHolding) && !leapCooldown)
             {
-                if (Plugin.SkillConfigs.TryGetValue("Leaping", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["Leaping"]).Value)
                 {
                     if (isGrounded || isHolding)
                     {
@@ -245,22 +248,32 @@ namespace ParkourKnuckle
                 }
             }
 
-            float currentCharge = 0f;
+            currentCharge = 0f;
 
             if (isCharging && Input.GetKey(KeyCode.G) && (isGrounded || isHolding) && !leapCooldown)
             {
                 currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
-                CL_CameraControl.Shake(currentCharge * Time.deltaTime * 0.025f);
 
-                foreach (var hand in player.hands)
+                if (Plugin.EnableParkourShake.Value)
                 {
-                    hand.ShakeHand(currentCharge * Time.deltaTime * 0.025f);
+                    CL_CameraControl.Shake(currentCharge * Time.deltaTime * 0.025f);
+
+                    foreach (var hand in player.hands)
+                    {
+
+                        hand.ShakeHand(currentCharge * Time.deltaTime * 0.025f);
+                    }
+                }
+
+                if (Plugin.EnableParkourFOV.Value)
+                {
+                    player.FOVShock(PlayerModifierPatch.currentCharge * 0.1f, false);
                 }
             }
 
             if (Input.GetKeyUp(KeyCode.G) && isCharging && (isGrounded || isHolding) && !leapCooldown)
             {
-                if (Plugin.SkillConfigs.TryGetValue("Leaping", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["Leaping"]).Value)
                 {
                     if (!isGrounded && !isHolding)
                     {
@@ -269,7 +282,7 @@ namespace ParkourKnuckle
                     }
                     currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
                     float chargeDuration = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
-                    float finalForce = chargeDuration * leapForceMultiplier;
+                    float finalForce = chargeDuration * (leapForceMultiplier * ((roidedCount / 2) + 1));
                     float finalCost = Mathf.CeilToInt(Mathf.Lerp(minStamina, maxStamina, chargeDuration / maxChargeTime));
 
                     Vector3 leapDirection = player.cam.transform.forward + (Vector3.up * upwardArcForce);
@@ -279,10 +292,13 @@ namespace ParkourKnuckle
 
                     foreach (var hand in player.hands)
                     {
-                        hand.gripStrength -= finalCost;
-                        if (hand.gripStrength < 0f)
+                        if (!isConsumableUltimate)
                         {
-                            hand.gripStrength = 0f;
+                            hand.gripStrength -= finalCost;
+                            if (hand.gripStrength < 0f)
+                            {
+                                hand.gripStrength = 0f;
+                            }
                         }
 
                         if (hand.IsHolding())
@@ -296,9 +312,16 @@ namespace ParkourKnuckle
                 }
             }
 
+            if (!isGrounded)
+            {
+                currentCharge = 0f;
+                isHolding = false;
+                isCharging = false;
+            }
+
             if (Input.GetKeyDown(KeyCode.Space) && Input.GetKey(KeyCode.S))
             {
-                if (Plugin.SkillConfigs.TryGetValue("WallKicking", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["WallKicking"]).Value)
                 {
                     bool bothStamina = true;
                     foreach (var hand in player.hands)
@@ -316,23 +339,34 @@ namespace ParkourKnuckle
                         if (Physics.Raycast(player.transform.position, backDirection, out RaycastHit hit, 1.2f))
                         {
                             Vector3 kickDir = hit.normal + (Vector3.up * 1.2f);
-                            float kickForce = 1.5f;
+                            float kickForce = 1.5f * ((roidedCount / 2) + 1);
 
                             player.SetDirectionalForce(kickDir.normalized * kickForce);
 
-                            CL_CameraControl.Shake(Time.deltaTime * 0.15f);
+                            if (Plugin.EnableParkourFOV.Value)
+                            {
+                                player.FOVShock(kickForce, false);
+                            }
+
+                            if (Plugin.EnableParkourShake.Value)
+                            {
+                                CL_CameraControl.Shake(Time.deltaTime * 0.15f);
+                            }
 
                             foreach (var hand in player.hands)
                             {
-                                hand.gripStrength -= 1.0f;
-                                if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                                if (!isConsumableUltimate)
+                                {
+                                    hand.gripStrength -= 1.0f;
+                                    if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                                }
                             }
                         }
                     }
                 }
             }
 
-            if (isGrounded && !isVerticalRun)
+            if (isGrounded && !isVerticalRun && !isHolding)
             {
                 isHorizRun = false;
                 isVerticalRun = false;
@@ -340,6 +374,15 @@ namespace ParkourKnuckle
                 hasWallRunVertical = false;
                 controller.enabled = true;
                 player.transform.rotation = Quaternion.Euler(0, player.transform.eulerAngles.y, 0);
+            }
+
+            if (!isGrounded && isHolding)
+            {
+                isHorizRun = false;
+                isVerticalRun = false;
+                hasWallRunInAir = true;
+                hasWallRunVertical = true;
+                controller.enabled = true;
             }
 
             bool canRun = true;
@@ -384,7 +427,7 @@ namespace ParkourKnuckle
 
             if (!hasWallRunInAir && isHoldingInput && (wallLeft || wallRight) && (isHorizRun || hasDoubleTapped))
             {
-                if (Plugin.SkillConfigs.TryGetValue("WallRunning", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["WallRunning"]).Value)
                 {
                     if (runStamina)
                     {
@@ -412,13 +455,25 @@ namespace ParkourKnuckle
 
                         Quaternion lookRot = Quaternion.LookRotation(runDir) * Quaternion.Euler(0, 0, tiltAmount);
                         player.transform.rotation = Quaternion.Slerp(player.transform.rotation, lookRot, Time.deltaTime * tiltLerpSpeed);
-                        player.SetDirectionalForce(((runDir * 0.8f) * (gripValue * 0.1f) + (Vector3.up * 0.1f)));
+                        player.SetDirectionalForce(((runDir * 0.8f) * ((gripValue * 0.1f) * ((roidedCount / 3.5f) + 1)) + (Vector3.up * 0.1f)));
 
-                        CL_CameraControl.Shake(Time.deltaTime * 0.25f);
+                        if (Plugin.EnableParkourFOV.Value)
+                        {
+                            player.FOVShock(Mathf.Lerp(1, 0, gripValue / 10), false);
+                        }
+
+                        if (Plugin.EnableParkourShake.Value)
+                        {
+                            CL_CameraControl.Shake(Time.deltaTime * 0.25f);
+                        }
+
                         foreach (var hand in player.hands)
                         {
-                            hand.gripStrength -= Time.deltaTime * 2.5f;
-                            if (hand.gripStrength < 0) hand.gripStrength = 0;
+                            if (!isConsumableUltimate)
+                            {
+                                hand.gripStrength -= Time.deltaTime * 2.5f;
+                                if (hand.gripStrength < 0) hand.gripStrength = 0;
+                            }
                         }
                     }
                     else
@@ -485,13 +540,18 @@ namespace ParkourKnuckle
 
             if (isVerticalRun && Input.GetKeyDown(KeyCode.Space) && verticalGraceTimer > 0 && verticalGraceTimer < maxGraceTime)
             {
-                if (Plugin.SkillConfigs.TryGetValue("WallRunBoost", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["WallRunBoost"]).Value)
                 {
-                    float pushAwayForce = 1.5f;
-                    float upwardArcForce = 1.5f;
+                    float pushAwayForce = 1.5f * ((roidedCount / 2) + 1);
+                    float upwardArcForce = 1.5f * ((roidedCount / 2) + 1);
 
                     Vector3 jumpOffDir = ((hitRun.normal * pushAwayForce) * (gripValue * 0.1f)) + ((Vector3.up * upwardArcForce) * (gripValue * 0.1f));
                     player.SetDirectionalForce(jumpOffDir);
+                    
+                    if (Plugin.EnableParkourFOV.Value)
+                    {
+                        player.FOVShock(2f, false);
+                    }
 
                     isVerticalRun = false;
                     verticalGraceTimer = 0;
@@ -523,10 +583,10 @@ namespace ParkourKnuckle
 
                 return;
             }
-
+            
             if (isHoldingRun && !hasWallRunVertical && wallFront && (!hasWallRunVertical || isVerticalRun) && (verticalGraceTimer == 0f))
             {
-                if (Plugin.SkillConfigs.TryGetValue("VerticalWallRunning", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["VerticalWallRunning"]).Value)
                 {
                     if (!isVerticalRun && !hasDoubleTappedRun)
                     { }
@@ -557,6 +617,15 @@ namespace ParkourKnuckle
                                     controller.enabled = true;
                                     return;
                                 }
+                            }
+
+                            if (Physics.Raycast(player.transform.position, player.transform.up, 3))
+                            {
+                                isVaulting = false;
+                                hasWallRunVertical = true;
+                                isVerticalRun = false;
+                                controller.enabled = true;
+                                return;
                             }
 
                             if (!wallAbove)
@@ -595,14 +664,26 @@ namespace ParkourKnuckle
                                 player.transform.rotation = Quaternion.Slerp(player.transform.rotation, climbRot, Time.deltaTime * 10f);
                             }
 
-                            Vector3 climbVelocity = (Vector3.up * 0.4f) * (gripValue * 0.15f);
+                            Vector3 climbVelocity = (Vector3.up * 0.4f) * (gripValue * (0.15f * ((roidedCount / 3) + 1)));
                             player.SetDirectionalForce(climbVelocity);
+                            
+                            if (Plugin.EnableParkourFOV.Value)
+                            {
+                                player.FOVShock(Mathf.Lerp(1, 0, gripValue / 10));
+                            }
 
-                            CL_CameraControl.Shake(Time.deltaTime * 0.4f);
+                            if (Plugin.EnableParkourShake.Value)
+                            {
+                                CL_CameraControl.Shake(Time.deltaTime * 0.4f);
+                            }
+
                             foreach (var hand in player.hands)
                             {
-                                hand.gripStrength -= Time.deltaTime * 4.5f;
-                                if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                                if (!isConsumableUltimate)
+                                {
+                                    hand.gripStrength -= Time.deltaTime * 4.5f;
+                                    if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                                }
                             }
                             return;
                         }
@@ -612,7 +693,7 @@ namespace ParkourKnuckle
 
             if (!isGrounded && !isVerticalRun && !isVaulting && verticalGraceTimer <= 0 && spaceTapTimer <= 0)
             {
-                if (Plugin.SkillConfigs.TryGetValue("VerticalWallRunning", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["VerticalWallRunning"]).Value)
                 {
                     if (controller.enabled)
                     {
@@ -634,7 +715,7 @@ namespace ParkourKnuckle
 
             if (isGrounded && player.IsCrouching() && !isSliding && canSlide)
             {
-                if (Plugin.SkillConfigs.TryGetValue("Sliding", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["Sliding"]).Value)
                 {
                     if (currentSpeed >= minSlideSpeed && isMovingForward)
                     {
@@ -644,10 +725,14 @@ namespace ParkourKnuckle
                         slideTime = 0f;
 
                         slideStartPos = player.transform.position;
-                        slideTargetPos = slideStartPos + (slideDir * 10f);
+                        slideTargetPos = slideStartPos + (slideDir * (10f * ((roidedCount / 2) + 1)));
 
                         controller.enabled = false;
-                        CL_CameraControl.Shake(Time.deltaTime * 0.1f);
+
+                        if (Plugin.EnableParkourShake.Value)
+                        {
+                            CL_CameraControl.Shake(Time.deltaTime * 0.1f);
+                        }
                     }
                 }
             }
@@ -656,12 +741,11 @@ namespace ParkourKnuckle
             {
                 if (Input.GetKeyDown(KeyCode.Space))
                 {
-                    if (Plugin.SkillConfigs.TryGetValue("SlideJumping", out var config) && config.Value)
+                    if (((ConfigEntry<bool>)Plugin.SkillConfigs["SlideJumping"]).Value)
                     {
-
                         float slideRemnant = 1f - (slideTime / slideDuration);
-                        float lungeForwardPower = 1f * slideRemnant;
-                        float lungUpwardPower = 1.5f * slideRemnant;
+                        float lungeForwardPower = 1f * slideRemnant * ((roidedCount / 2) + 1);
+                        float lungUpwardPower = 1.5f * slideRemnant * ((roidedCount / 2) + 1);
                         Vector3 lungeVelocity = (slideDir * lungeForwardPower) + (Vector3.up * lungUpwardPower);
 
                         float staminaCost = lungeVelocity.magnitude * 1f;
@@ -684,12 +768,24 @@ namespace ParkourKnuckle
                         if (hasEnoughStamina)
                         {
                             player.SetDirectionalForce(lungeVelocity);
-                            CL_CameraControl.Shake(lungeVelocity.magnitude * Time.deltaTime * 0.1f);
+
+                            if (Plugin.EnableParkourShake.Value)
+                            {
+                                CL_CameraControl.Shake(lungeVelocity.magnitude * Time.deltaTime * 0.1f);
+                            }
+
+                            if (Plugin.EnableParkourFOV.Value)
+                            {
+                                player.FOVShock(2, false);
+                            }
 
                             foreach (var hand in player.hands)
                             {
-                                hand.gripStrength -= staminaCost;
-                                if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                                if (!isConsumableUltimate)
+                                {
+                                    hand.gripStrength -= staminaCost;
+                                    if (hand.gripStrength < 0f) hand.gripStrength = 0f;
+                                }
                             }
 
                             isSliding = false;
@@ -703,14 +799,17 @@ namespace ParkourKnuckle
                 float t = slideTime / slideDuration;
 
                 float easedT = 1 - (1 - t) * (1 - t);
-                Vector3 nextPos = Vector3.Lerp(slideStartPos, slideTargetPos, easedT);
+                Vector3 nextPos = Vector3.Lerp(slideStartPos, slideTargetPos, (easedT * ((roidedCount / 10) + 1)));
 
                 if (Physics.Raycast(player.transform.position + (Vector3.up * 0.05f) + (slideDir * 0.3f), slideDir, 0.8f))
                 {
                     slideTargetPos = player.transform.position;
                     slideTime = slideDuration;
 
-                    CL_CameraControl.Shake(Time.deltaTime * 0.1f);
+                    if (Plugin.EnableParkourShake.Value)
+                    {
+                        CL_CameraControl.Shake(Time.deltaTime * 0.1f);
+                    }
 
                     isSliding = false;
                     controller.enabled = true;
@@ -724,6 +823,11 @@ namespace ParkourKnuckle
                 else
                 {
                     player.transform.position = nextPos;
+
+                    if (Plugin.EnableParkourFOV.Value)
+                    {
+                        player.FOVShock(Mathf.Lerp(1.5f, 0f, easedT), false);
+                    }
 
                     if (Plugin.EnableParkourRotation.Value)
                     {
@@ -739,7 +843,7 @@ namespace ParkourKnuckle
 
             if (!wasGrounded && isGrounded)
             {
-                if (Plugin.SkillConfigs.TryGetValue("Rolling", out var config) && config.Value)
+                if (((ConfigEntry<bool>)Plugin.SkillConfigs["Rolling"]).Value)
                 {
                     float fallDistance = startY - player.transform.position.y;
 
@@ -802,8 +906,8 @@ namespace ParkourKnuckle
 
             wasGrounded = isGrounded;
 
-            float MaxHeight = Plugin.CurrencyConfigs["MaxHeight"].Value;
-            float HeightCurrency = Plugin.CurrencyConfigs["HeightCurrency"].Value;
+            float MaxHeight = ((ConfigEntry<float>)Plugin.SkillConfigs["MaxHeight"]).Value;
+            float HeightCurrency = ((ConfigEntry<float>)Plugin.SkillConfigs["HeightCurrency"]).Value;
             
             int currentMilestone = (int)(levelHighestHeight / 100);
             levelHighestHeight = player.transform.position.y;
@@ -812,7 +916,7 @@ namespace ParkourKnuckle
             {
                 if (levelHighestHeight > MaxHeight)
                 {
-                    Plugin.CurrencyConfigs["MaxHeight"].Value = levelHighestHeight;
+                    ((ConfigEntry<float>)Plugin.SkillConfigs["MaxHeight"]).Value = levelHighestHeight;
                 }
 
                 liveRunHeight = 0f;
@@ -834,7 +938,7 @@ namespace ParkourKnuckle
 
                 previousCurrency = HeightCurrency;
 
-                Plugin.CurrencyConfigs["HeightCurrency"].Value += gainedMilestone * 10f;
+                ((ConfigEntry<float>)Plugin.SkillConfigs["HeightCurrency"]).Value += gainedMilestone * 10f;
 
                 if (levelHighestHeight > liveRunHeight && MaxHeight >= 100)
                 {
@@ -847,7 +951,7 @@ namespace ParkourKnuckle
                         bonusPoints = 10;
                     }
 
-                    Plugin.CurrencyConfigs["HeightCurrency"].Value += bonusPoints;
+                    ((ConfigEntry<float>)Plugin.SkillConfigs["HeightCurrency"]).Value += bonusPoints;
                     liveRunHeight = levelHighestHeight;
                 }
 
@@ -878,19 +982,33 @@ namespace ParkourKnuckle
     public class WorldUpdate
     {
         private static bool playerExisted = false;
-        private static readonly float levelHighestHeight = PlayerModifierPatch.levelHighestHeight;
 
         [HarmonyPrefix]
         public static void Postfix()
         {
+            float levelHighestHeight = PlayerModifierPatch.levelHighestHeight;
             var player = ENT_Player.playerObject;
-            float MaxHeight = Plugin.CurrencyConfigs["MaxHeight"].Value;
+            float MaxHeight = ((ConfigEntry<float>)Plugin.SkillConfigs["MaxHeight"]).Value;
 
             if (player != null)
             {
+                
                 if (!playerExisted)
                 {
                     playerExisted = true;
+                }
+
+                if (player?.curBuffs != null)
+                {
+                    var listField = player.curBuffs.GetType().GetFields((System.Reflection.BindingFlags)62).FirstOrDefault(f => f.FieldType == typeof(List<BuffContainer>));
+                    var activeList = listField?.GetValue(player.curBuffs) as List<BuffContainer>;
+
+                    var buffNames = activeList?.SelectMany(c => c?.buffs ?? new List<BuffContainer.Buff>()).Where(b => b != null && !string.IsNullOrEmpty(b.id)).Select(b => b.id);
+
+                    PlayerModifierPatch.isConsumableUltimate = buffNames != null && buffNames.Any(name => name == "pilled" || name == "roided");
+                    PlayerModifierPatch.roidedCount = buffNames != null ? buffNames.Count(name => name == "roided") : 0;
+
+                    Debug.Log($"{PlayerModifierPatch.isConsumableUltimate}, {PlayerModifierPatch.roidedCount}");
                 }
             }
 
@@ -898,7 +1016,7 @@ namespace ParkourKnuckle
             {
                 if (levelHighestHeight > MaxHeight)
                 {
-                    Plugin.CurrencyConfigs["MaxHeight"].Value = levelHighestHeight;
+                    ((ConfigEntry<float>)Plugin.SkillConfigs["MaxHeight"]).Value = levelHighestHeight;
                 }
 
                 PlayerModifierPatch.liveRunHeight = 0f;
@@ -908,7 +1026,7 @@ namespace ParkourKnuckle
 
             if (ParkourUI.hasPurchased)
             {
-                Plugin.CurrencyConfigs["HeightCurrency"].Value = ParkourUI.newCurrencyAmount;
+                ((ConfigEntry<float>)Plugin.SkillConfigs["HeightCurrency"]).Value = ParkourUI.newCurrencyAmount;
                 ParkourUI.hasPurchased = false;
                 ParkourUI.UpdateCurrencyDisplay();
             }

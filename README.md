@@ -3,6 +3,8 @@ This mod adds various movement types that attempt to aid you in your attempt to 
 
 *Developer note: AI was used in partial to help with the development of the code.*
 
+To access the settings, press the right arrow button at the top of the skill tree. This will take you to the options page. Every 100 meters you climb adds 10 credits to your total amount of credits. A bonus is rewarded if you pass your highest climb that was set during your exit or death, which is also given every 100 meters. You can check "parkourprogress.cfg" in your BepInEx config to check and change your progress data.
+
 ## Unlock Abilities
 **Use Height Currency to Buy Skills**
 
@@ -61,3 +63,25 @@ During a slide, you can jump to gain a boost. This boost does consume hand stami
 While you are falling from great height, hold down your crouch button to initiate a roll when you land. This takes no stamina and prevents fall damage from the landing impact.
 
 ![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/Roll.gif?raw=true)
+
+## Version (-1 GH) 1.4.7 MP
+### Main Changes
+(+)
+* Added new camera options for parkour: “Use Parkour FOV” and “Use Parkour Shake”.
+* Added multipliers to each skill that change depending on the amount of injectors are in effect.
+* Added a reset to the leap's charging state when the player leaves the ground while generating charge.
+* Fixed the bug where stamina is lost even though the player has used pills and injectors.
+
+(-)
+* Replaced separate currency and skill config maps with a single shared skill config map for all types of values instead of individual ones per config.
+* Removed the ability to wall run while holding on to objects to prevent accidental wall running while climbing.
+
+### UI Changes
+(+)
+* Added on-screen toggles for camera FOV and camera shake in the options menu.
+* Added ability cooldown UI elements to help track ability cooldown states during a session.
+* Added a height display text element to help track the highest climb from previous sessions.
+* Added the ability to check current amount of credits and highest climb in the pause menu and death screen menu.
+
+(-)
+* Replaced periodic player lookup with cached player presence checks to reduce lag. (difference on my pc went from a maximum of 50 fps to 144 fps with VSync enabled on both tests)

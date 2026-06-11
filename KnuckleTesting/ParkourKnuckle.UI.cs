@@ -1,13 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using BepInEx.Configuration;
+using DarkMachine.UI;
+using JetBrains.Annotations;
+using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using DarkMachine.UI;
-using TMPro;
-using JetBrains.Annotations;
 
 namespace ParkourKnuckle.UI
 {
@@ -29,6 +31,7 @@ namespace ParkourKnuckle.UI
         private Transform contentTransform;
         private GameObject clickOutsideBlocker;
         private static TextMeshProUGUI currencyTextComponent;
+        private static TextMeshProUGUI heightTextComponent;
         private GameObject currencyIconObj;
         private GameObject currencyAddObj;
         private TextMeshProUGUI mainText;
@@ -37,6 +40,17 @@ namespace ParkourKnuckle.UI
         private GameObject resetConfirmBox;
         private Button confirmButton;
         private Button denyButton;
+        private GameObject abilityTimesContainer;
+        private GameObject leapAbilityBox;
+        private GameObject qtAbilityBox;
+        private Image leapAbilityTimer;
+        private Image leapForceGlow;
+        private Image qtAbilityTimer;
+        private GameObject loadingScreen;
+        private GameObject loadingImages;
+        private TextMeshProUGUI mapLoadingText;
+        private TextMeshProUGUI seedLoadingText;
+        private TextMeshProUGUI idLoadingText;
 
         private GameObject optionsContentObj;
         private GameObject forwardButtonObj;
@@ -44,6 +58,8 @@ namespace ParkourKnuckle.UI
         private Transform headerGroup;
         private TextMeshProUGUI textHeaderComponent;
         private Toggle cameraRotationToggle;
+        private Toggle cameraFOVToggle;
+        private Toggle cameraShakeToggle;
         private Button resetProgressButton;
 
         private GameObject descriptionPanelObj;
@@ -61,9 +77,11 @@ namespace ParkourKnuckle.UI
         private readonly Dictionary<string, Image> skillLines = new Dictionary<string, Image>();
         private readonly List<Coroutine> activeAnimations = new List<Coroutine>();
         private readonly Dictionary<string, Coroutine> activeButtonCoroutines = new Dictionary<string, Coroutine>();
+        private readonly Dictionary<string, GameObject> graffitiScreens = new Dictionary<string, GameObject>();
 
         public static bool hasPurchased = false;
         public static float newCurrencyAmount = 0;
+        public static bool purchaseTrue = true;
 
         private readonly Dictionary<string, string> perkDescriptions = new Dictionary<string, string>()
         {
@@ -110,8 +128,6 @@ namespace ParkourKnuckle.UI
         private bool isAnimatingBranch = false;
 
         private bool wasPlayerObjectPresent = false;
-        private float scanTimer = 0f;
-        private const float scanInterval = 0.5f;
 
         private const float wobbleSpeed = 2.5f;
         private const float wobbleMagnitude = 4.0f;
@@ -124,6 +140,14 @@ namespace ParkourKnuckle.UI
 
         private GameObject perkIconHolderObj;
         private readonly Dictionary<string, GameObject> perkIcons = new Dictionary<string, GameObject>();
+
+        private bool hadLoading = false;
+        private string activeGraffitiName = null;
+        private float playerCheckTimer = 0f;
+        private const float PLAYER_CHECK_INTERVAL = 0.2f;
+        private bool cachedIsPlayerPresent = false;
+        private CL_GameManager cachedGameManager = null;
+        private RectTransform cachedPerkIconRect = null;
 
         public static void Initialize()
         {
@@ -138,34 +162,153 @@ namespace ParkourKnuckle.UI
 
         private void Update()
         {
-            scanTimer += Time.deltaTime;
-            if (scanTimer >= scanInterval)
+            playerCheckTimer += Time.deltaTime;
+            if (playerCheckTimer >= PLAYER_CHECK_INTERVAL)
             {
-                scanTimer = 0f;
-                bool isPlayerObjectPresent = GameObject.Find("CL_Player") != null;
+                playerCheckTimer = 0f;
+                cachedIsPlayerPresent = GameObject.Find("CL_Player") != null;
+            }
+            bool isPlayerObjectPresent = cachedIsPlayerPresent;
 
-                if (isPlayerObjectPresent && !wasPlayerObjectPresent)
+            if (isPlayerObjectPresent && !wasPlayerObjectPresent)
+            {
+                wasPlayerObjectPresent = true;
+                if (Plugin.isUIVisible) ToggleUIPanel(false);
+                if (openButtonObj != null) openButtonObj.SetActive(false);
+
+                if (currencyIconObj != null) currencyIconObj.SetActive(false);
+
+                if (abilityTimesContainer != null)
                 {
-                    wasPlayerObjectPresent = true;
-                    if (Plugin.isUIVisible) ToggleUIPanel(false);
-                    if (openButtonObj != null) openButtonObj.SetActive(false);
-
-                    if (currencyIconObj != null) currencyIconObj.SetActive(false); 
+                    abilityTimesContainer.SetActive(true);
                 }
-                else if (!isPlayerObjectPresent && wasPlayerObjectPresent)
+            }
+            else if (!isPlayerObjectPresent && wasPlayerObjectPresent)
+            {
+                wasPlayerObjectPresent = false;
+                if (openButtonObj != null && !Plugin.isUIVisible)
                 {
-                    wasPlayerObjectPresent = false;
-                    if (openButtonObj != null && !Plugin.isUIVisible)
+                    openButtonObj.SetActive(true);
+                    openButtonObj.transform.localScale = Vector3.one;
+                }
+
+                if (currencyIconObj != null)
+                {
+                    currencyIconObj.SetActive(true);
+                    UpdateCurrencyDisplay();
+                }
+
+                if (abilityTimesContainer != null)
+                {
+                    abilityTimesContainer.SetActive(false);
+                }
+            }
+
+            if (isPlayerObjectPresent)
+            {
+                if (qtAbilityBox != null)
+                {
+                    if ((((ConfigEntry<bool>)Plugin.SkillConfigs["QuickTurning"]).Value) && ENT_Player.playerObject.health > 0f && !cachedGameManager.isPaused) qtAbilityBox.SetActive(true);
+                    else qtAbilityBox.SetActive(false);
+
+                    if (qtAbilityTimer != null && ParkourKnuckle.PlayerModifierPatch.onCooldown)
                     {
-                        openButtonObj.SetActive(true);
-                        openButtonObj.transform.localScale = Vector3.one;
+                        qtAbilityTimer.fillAmount = ParkourKnuckle.PlayerModifierPatch.CooldownTime / ParkourKnuckle.PlayerModifierPatch.CooldownDur;
+                    }
+                    else if (qtAbilityTimer != null)
+                    {
+                        qtAbilityTimer.fillAmount = 1;
+                    }
+                }
+
+                if (leapAbilityBox != null)
+                {
+                    if ((((ConfigEntry<bool>)Plugin.SkillConfigs["Leaping"]).Value) && ENT_Player.playerObject.health > 0f && !cachedGameManager.isPaused) leapAbilityBox.SetActive(true);
+                    else leapAbilityBox.SetActive(false);
+
+                    if (leapAbilityTimer != null && ParkourKnuckle.PlayerModifierPatch.leapCooldown)
+                    {
+                        leapAbilityTimer.fillAmount = ParkourKnuckle.PlayerModifierPatch.leapCooldownTime / ParkourKnuckle.PlayerModifierPatch.leapCooldownDur;
+                    }
+                    else if (leapAbilityTimer != null)
+                    {
+                        leapAbilityTimer.fillAmount = 1;
                     }
 
-                    if (currencyIconObj != null)
+                    if (leapForceGlow != null && ParkourKnuckle.PlayerModifierPatch.isCharging)
                     {
-                        currencyIconObj.SetActive(true);
-                        UpdateCurrencyDisplay();
+                        leapForceGlow.fillAmount = ParkourKnuckle.PlayerModifierPatch.currentCharge / ParkourKnuckle.PlayerModifierPatch.maxChargeTime;
+                        leapForceGlow.color = new Color(leapForceGlow.color.r, leapForceGlow.color.g, leapForceGlow.color.b, Mathf.Max(0.1f, leapForceGlow.fillAmount / 2f));
                     }
+                    else if (leapForceGlow != null)
+                    {
+                        leapForceGlow.fillAmount = 0;
+                    }
+                }
+
+                if (currencyIconObj != null && (ENT_Player.playerObject.health <= 0 || cachedGameManager.isPaused))
+                {
+                    currencyIconObj.SetActive(true);
+                } else if (currencyIconObj != null && (ENT_Player.playerObject.health > 0 && !cachedGameManager.isPaused))
+                {
+                    currencyIconObj.SetActive(false);
+                }
+            }
+
+            if (cachedGameManager == null)
+            {
+                cachedGameManager = CL_GameManager.FindObjectOfType<CL_GameManager>();
+            }
+
+            if (cachedGameManager != null)
+            {
+                if (CL_GameManager.IsLoading() && !hadLoading)
+                {
+                    hadLoading = true;
+                    loadingScreen.SetActive(true);
+
+                    int randomNumber = UnityEngine.Random.Range(1, 10);
+                    string targetName = "Graffiti" + randomNumber;
+
+                    if (graffitiScreens.TryGetValue(targetName, out GameObject screen))
+                    {
+                        screen.SetActive(true);
+                        activeGraffitiName = targetName;
+                    }
+                }
+                else if (!CL_GameManager.IsLoading() && hadLoading)
+                {
+                    hadLoading = false;
+                    mapLoadingText.text = "";
+                    seedLoadingText.text = "";
+                    idLoadingText.text = "";
+                    loadingScreen.SetActive(false);
+
+                    if (!string.IsNullOrEmpty(activeGraffitiName))
+                    {
+                        if (graffitiScreens.TryGetValue(activeGraffitiName, out GameObject screen))
+                        {
+                            screen.SetActive(false);
+                        }
+
+                        activeGraffitiName = null;
+                    }
+                }
+            }
+
+            if (cachedGameManager != null && CL_GameManager.IsLoading())
+            {
+                M_Level currentLevel = M_Level.FindAnyObjectByType<M_Level>();
+                
+                if (currentLevel != null)
+                {
+                    string foundMapName = currentLevel.levelName;
+                    int foundSeedNumber = currentLevel.GetLevelSeed();
+                    int foundIDNumber = currentLevel.GetInstanceID();
+
+                    mapLoadingText.text = foundMapName;
+                    seedLoadingText.text = foundSeedNumber.ToString();
+                    idLoadingText.text = foundIDNumber.ToString();
                 }
             }
 
@@ -177,12 +320,19 @@ namespace ParkourKnuckle.UI
             if (Plugin.isUIVisible && perkIconHolderObj != null && perkIconHolderObj.activeSelf)
             {
                 float timeEngine = Time.time * wobbleSpeed;
-                RectTransform iconRect = perkIconHolderObj.GetComponent<RectTransform>();
+
+                if (cachedPerkIconRect == null)
+                {
+                    cachedPerkIconRect = perkIconHolderObj.GetComponent<RectTransform>();
+                }
 
                 float noiseX = Mathf.Sin(timeEngine) * wobbleMagnitude;
                 float noiseY = Mathf.Cos(timeEngine * 0.8f) * wobbleMagnitude;
 
-                iconRect.anchoredPosition = new Vector2(noiseX, noiseY);
+                if (cachedPerkIconRect != null)
+                {
+                    cachedPerkIconRect.anchoredPosition = new Vector2(noiseX, noiseY);
+                }
             }
         }
 
@@ -249,12 +399,12 @@ namespace ParkourKnuckle.UI
             {
                 if (Plugin.SkillConfigs.TryGetValue("QuickTurning", out var qtConfig))
                 {
-                    return qtConfig.Value;
+                    return ((ConfigEntry<bool>)qtConfig).Value;
                 }
                 return false;
             }
 
-            if (Plugin.SkillConfigs.TryGetValue(configKey, out var config) && !config.Value)
+            if (Plugin.SkillConfigs.TryGetValue(configKey, out var config) && !((ConfigEntry<bool>)config).Value)
             {
                 return false;
             }
@@ -330,6 +480,8 @@ namespace ParkourKnuckle.UI
             skillTreePanel = uiInstance.transform.Find("STMainBorder")?.gameObject;
             currencyIconObj = uiInstance.transform.Find("CurrencyIcon")?.gameObject;
             currencyAddObj = uiInstance.transform.Find("CurrencyAdd")?.gameObject;
+            abilityTimesContainer = uiInstance.transform.Find("AbilityTimes")?.gameObject;
+            loadingScreen = uiInstance.transform.Find("LoadingScreen")?.gameObject;
 
             if (skillTreePanel != null)
             {
@@ -375,6 +527,8 @@ namespace ParkourKnuckle.UI
                 if (optionsContentObj != null)
                 {
                     cameraRotationToggle = optionsContentObj.transform.Find("EPRToggle")?.GetComponent<Toggle>();
+                    cameraFOVToggle = optionsContentObj.transform.Find("EPFToggle")?.GetComponent<Toggle>();
+                    cameraShakeToggle = optionsContentObj.transform.Find("EPSToggle")?.GetComponent<Toggle>();
                     resetProgressButton = optionsContentObj.transform.Find("ResetButton")?.GetComponent<Button>();
                 }
 
@@ -406,6 +560,7 @@ namespace ParkourKnuckle.UI
             if (currencyIconObj != null)
             {
                 currencyTextComponent = currencyIconObj.transform.Find("CurrencyText")?.GetComponent<TextMeshProUGUI>();
+                heightTextComponent = currencyIconObj.transform.Find("HeightText")?.GetComponent<TextMeshProUGUI>();
             }
 
             UpdateCurrencyDisplay();
@@ -446,13 +601,61 @@ namespace ParkourKnuckle.UI
                 infoText = currencyAddObj.transform.Find("CurrencyAddTextInto")?.GetComponent<TextMeshProUGUI>();
                 currencyAddObj.SetActive(false);
             }
+
+            if (abilityTimesContainer != null)
+            {
+                leapAbilityBox = abilityTimesContainer.transform.Find("LeapAbility").gameObject;
+                qtAbilityBox = abilityTimesContainer.transform.Find("QTAbility").gameObject;
+
+                if (leapAbilityBox != null)
+                {
+                    leapAbilityTimer = leapAbilityBox.transform.Find("LeapTimer").GetComponent<Image>();
+                    leapForceGlow = leapAbilityBox.transform.Find("LeapForceGlow").GetComponent<Image>();
+                    leapAbilityBox.SetActive(false);
+                }   
+                
+                if (qtAbilityBox != null)
+                {
+                    qtAbilityTimer = qtAbilityBox.transform.Find("QTTimer").GetComponent<Image>();
+                    leapAbilityBox.SetActive(false);
+                }
+                
+                abilityTimesContainer.SetActive(false);
+            }
+
+            if (loadingScreen != null)
+            {
+                loadingImages = loadingScreen.transform.Find("LoadingImages").gameObject;
+                foreach (Transform child in loadingImages.transform)
+                {
+                    if (child.name.StartsWith("Graffiti"))
+                    {
+                        graffitiScreens[child.name] = child.gameObject;
+                        child.gameObject.SetActive(false);
+                    }
+                }
+
+                mapLoadingText = loadingScreen.transform.Find("MapText").GetComponent<TextMeshProUGUI>();
+                mapLoadingText.text = "";
+                seedLoadingText = loadingScreen.transform.Find("SeedText").GetComponent<TextMeshProUGUI>();
+                seedLoadingText.text = "";
+                idLoadingText = loadingScreen.transform.Find("MapIDText").GetComponent<TextMeshProUGUI>();
+                idLoadingText.text = "";
+                loadingScreen.SetActive(false);
+            }
         }
 
         public static void UpdateCurrencyDisplay()
         {
-            if (currencyTextComponent != null && Plugin.CurrencyConfigs.TryGetValue("HeightCurrency", out var config))
+            if (currencyTextComponent != null && Plugin.SkillConfigs.TryGetValue("HeightCurrency", out var currencyconfig))
             {
-                currencyTextComponent.text = config.Value.ToString();
+                currencyTextComponent.text = ((ConfigEntry<float>)currencyconfig).Value.ToString();
+            }
+            
+            if (heightTextComponent != null && Plugin.SkillConfigs.TryGetValue("MaxHeight", out var heightconfig))
+            {
+                int hcfloat = (int)((ConfigEntry<float>)heightconfig).Value;
+                heightTextComponent.text = hcfloat.ToString() + "m";
             }
         }
 
@@ -575,6 +778,22 @@ namespace ParkourKnuckle.UI
                 });
             }
 
+            if (cameraFOVToggle != null)
+            {
+                cameraFOVToggle.isOn = Plugin.EnableParkourFOV.Value;
+                cameraFOVToggle.onValueChanged.AddListener(isChecked => {
+                    Plugin.EnableParkourFOV.Value = isChecked;
+                });
+            }
+
+            if (cameraShakeToggle != null)
+            {
+                cameraShakeToggle.isOn = Plugin.EnableParkourShake.Value;
+                cameraShakeToggle.onValueChanged.AddListener(isChecked => {
+                    Plugin.EnableParkourShake.Value = isChecked;
+                });
+            }
+
             resetProgressButton?.onClick.AddListener(ShowResetConfirmPopup);
             purchaseButton?.onClick.AddListener(OnPurchasePressed);
         }
@@ -598,6 +817,16 @@ namespace ParkourKnuckle.UI
             if (!showPerksTree && cameraRotationToggle != null)
             {
                 cameraRotationToggle.isOn = Plugin.EnableParkourRotation.Value;
+            }
+
+            if (!showPerksTree && cameraFOVToggle != null)
+            {
+                cameraFOVToggle.isOn = Plugin.EnableParkourFOV.Value;
+            }
+
+            if (!showPerksTree && cameraShakeToggle != null)
+            {
+                cameraShakeToggle.isOn = Plugin.EnableParkourShake.Value;
             }
 
 
@@ -632,13 +861,13 @@ namespace ParkourKnuckle.UI
             {
                 if (Plugin.SkillConfigs.TryGetValue(key, out var config))
                 {
-                    config.Value = false;
+                    ((ConfigEntry<bool>)config).Value = false;
                 }
             }
 
             newCurrencyAmount = 0f;
-            Plugin.CurrencyConfigs["HeightCurrency"].Value = 0f;
-            Plugin.CurrencyConfigs["MaxHeight"].Value = 0f;
+            ((ConfigEntry<float>)Plugin.SkillConfigs["HeightCurrency"]).Value = 0f;
+            ((ConfigEntry<float>)Plugin.SkillConfigs["MaxHeight"]).Value = 0f;
             UpdateCurrencyDisplay();
 
             foreach (var anim in activeAnimations)
@@ -764,7 +993,7 @@ namespace ParkourKnuckle.UI
             {
                 if (Plugin.SkillConfigs.TryGetValue(reqKey, out var config))
                 {
-                    if (!config.Value) return false;
+                    if (!((ConfigEntry<bool>)config).Value) return false;
                 }
                 else
                 {
@@ -822,7 +1051,7 @@ namespace ParkourKnuckle.UI
                 {
                     purchaseButton.gameObject.SetActive(true);
 
-                    if (config.Value)
+                    if (((ConfigEntry<bool>)config).Value)
                     {
                         purchaseButton.interactable = false;
                         if (purchaseButtonText != null) purchaseButtonText.text = "ACTIVE";
@@ -839,7 +1068,7 @@ namespace ParkourKnuckle.UI
             {
                 perkIconHolderObj.SetActive(true);
 
-                if (config.Value)
+                if (((ConfigEntry<bool>)config).Value)
                 {
                     if (perkCurrencyText != null) perkCurrencyText.gameObject.SetActive(false);
                     if (perkCurrencyIcon != null) perkCurrencyIcon.SetActive(false);
@@ -906,18 +1135,19 @@ namespace ParkourKnuckle.UI
 
             if (!skillPrices.TryGetValue(currentlySelectedSkillKey, out float cost)) cost = 0;
 
-            if (ParkourKnuckle.Plugin.CurrencyConfigs["HeightCurrency"].Value < cost)
+            if (((ConfigEntry<float>)ParkourKnuckle.Plugin.SkillConfigs["HeightCurrency"]).Value < cost)
                 {
                     return;
                 }
 
             if (Plugin.SkillConfigs.TryGetValue(currentlySelectedSkillKey, out var config))
             {
-                if (config.Value) return;
-                
-                config.Value = true;
+                if (((ConfigEntry<bool>)config).Value) return;
+
+                ((ConfigEntry<bool>)config).Value = true;
+                Plugin.ProgressionFile.Save();
                 pendingPurchaseAnimation = true;
-                newCurrencyAmount = ParkourKnuckle.Plugin.CurrencyConfigs["HeightCurrency"].Value - cost;
+                newCurrencyAmount = ((ConfigEntry<float>)ParkourKnuckle.Plugin.SkillConfigs["HeightCurrency"]).Value - cost;
                 hasPurchased = true;
 
                 if (purchaseButton != null)
@@ -1209,7 +1439,7 @@ namespace ParkourKnuckle.UI
 
                 if (Plugin.SkillConfigs.TryGetValue(configKey, out var config))
                 {
-                    if (config.Value)
+                    if (((ConfigEntry<bool>)config).Value)
                     {
                         btnImage.color = new Color(0.2f, 0.75f, 0.2f, 1f);
                         btn.interactable = true;
@@ -1244,7 +1474,7 @@ namespace ParkourKnuckle.UI
                 }
             }
 
-            if (Plugin.SkillConfigs.TryGetValue("QuickTurning", out var qtConfig) && qtConfig.Value)
+            if (Plugin.SkillConfigs.TryGetValue("QuickTurning", out var qtConfig) && ((ConfigEntry<bool>)qtConfig).Value)
             {
                 if (skillLines.TryGetValue("QuickTurning", out var slideLine))
                 {
