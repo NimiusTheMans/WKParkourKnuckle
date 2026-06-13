@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using UnityEngine.EventSystems;
 using ParkourKnuckle.UI;
 
@@ -13,7 +13,6 @@ namespace ParkourKnuckle.Patches
             {
                 ParkourUI.Initialize();
 
-                // FIXED: Changed ToggleVisibility to ToggleUIPanel to match ParkourUI.cs
                 ParkourUI.Instance?.ToggleUIPanel(Plugin.isUIVisible);
             }
 
@@ -21,7 +20,6 @@ namespace ParkourKnuckle.Patches
             {
                 Plugin.isUIVisible = !Plugin.isUIVisible;
 
-                // SIMPLIFIED NULL CHECK: Clean implementation using ?.
                 ParkourUI.Instance?.ToggleUIPanel(Plugin.isUIVisible);
             }
         }
