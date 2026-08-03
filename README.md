@@ -4,6 +4,7 @@ This mod adds various movement types that attempt to aid you in your attempt to 
 *Developer note: AI was used in partial to help with the development of the code.*
 
 To access the settings, press the right arrow button at the top of the skill tree. This will take you to the options page. Every 100 meters you climb adds 10 credits to your total amount of credits. A bonus is rewarded if you pass your highest climb that was set during your exit or death, which is also given every 100 meters. You can check "parkourprogress.cfg" in your BepInEx config to check and change your progress data.
+
 **Report any bugs or request changes in the official White Knuckle Discord server or in the GitHub repository.**
 
 ## Unlock Abilities
