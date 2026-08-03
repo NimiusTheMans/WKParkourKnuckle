@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using UnityEngine.EventSystems;
 using ParkourKnuckle.UI;
 
