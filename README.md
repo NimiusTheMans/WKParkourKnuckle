@@ -4,6 +4,7 @@ This mod adds various movement types that attempt to aid you in your attempt to 
 *Developer note: AI was used in partial to help with the development of the code.*
 
 To access the settings, press the right arrow button at the top of the skill tree. This will take you to the options page. Every 100 meters you climb adds 10 credits to your total amount of credits. A bonus is rewarded if you pass your highest climb that was set during your exit or death, which is also given every 100 meters. You can check "parkourprogress.cfg" in your BepInEx config to check and change your progress data.
+**Report any bugs or request changes in the official White Knuckle Discord server or in the GitHub repository.**
 
 ## Unlock Abilities
 **Use Height Currency to Buy Skills**
@@ -64,27 +65,29 @@ While you are falling from great height, hold down your crouch button to initiat
 
 ![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/Roll.gif?raw=true)
 
-## Version 1.4.7 SP
+## Version 1.4.8 SP
 ### Main Changes
 (+)
-* Added new camera options for parkour: “Use Parkour FOV” and “Use Parkour Shake”.
-* Added a new option group with a new option: "Use Wall Run Helper" - this will create a glow on the sides of your screen when your wall runs are ready.
-* Added multipliers to each skill that change depending on the amount of injectors are in effect. (maximum of 5)
-* Added a reset to the leap's charging state when the player leaves the ground while generating charge.
-* Fixed the bug where stamina is lost even though the player has used pills and injectors. (Wall running still drains stamina, but with less intensity)
-
-(-)
-* Replaced separate currency and skill config maps with a single shared skill config map for all types of values instead of individual ones per config.
-* Removed the ability to wall run while holding on to objects to prevent accidental wall running while climbing.
+* Sliding now throws objects based on the player's velocity.
+* Changed the descriptions of toggles to better reflect what they do.
+* Fixed a bug where abilities never restarted when restarting a scene.
+* Fixed a bug where the visual loading screen would pop up while in a session.
 
 ### UI Changes
 (+)
-* Added on-screen toggles for camera FOV and camera shake in the options menu.
-* Added ability cooldown UI elements to help track ability cooldown states during a session.
-* Added a height display text element to help track the highest climb from previous sessions.
-* Added the ability to check current amount of credits and highest climb in the pause menu and death screen menu.
-* Added new separators in the options menu for Camera Settings and UI Settings.
-* Fixed the bug where F4 would re-enable the open button during a session.
+* Fixed a bug where the screen glow would show up even when wall running wasn't activated.
+
+### Code Changes
+(+)
+* Added null-conditional operators to prevent potential NullReferenceExceptions when setting GameObject states.
+* Replaced some direct assignments with null-conditional operators to make code more concise.
+* Changed some SetActive calls to use null-conditional operators to prevent potential NullReferenceExceptions.
+* Added UpdateCurrencyDisplay call when the player object is present and the currency icon is active.
+* Updated plugin version from 1.2.1 to 1.4.8.
+* Changed beginning log messages to better reflect what is happening in the background.
+* Replaced a mismatch between functions to use Postfix instead of Prefix and Postfix.
+* Replaced null checks before calling SetActive on GameObjects with easier to read versions.
 
 (-)
-* Replaced periodic player lookup with cached player presence checks to reduce lag. (difference on my pc went from a maximum of 50 fps to 144 fps with VSync enabled on both tests)
+* Removed unused variables code blocks.
+* Removed duplicate code blocks for handling skill tree panel and options content visibility. 

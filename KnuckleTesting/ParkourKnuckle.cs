@@ -12,7 +12,7 @@ using UnityEngine.EventSystems;
 
 namespace ParkourKnuckle
 {
-    [BepInPlugin("com.nimius.parkourknuckle", "Parkour Knuckle", "1.2.1")]
+    [BepInPlugin("com.nimius.parkourknuckle", "Parkour Knuckle", "1.4.8")]
     public class Plugin : BaseUnityPlugin
     {
         private Harmony _harmony;
@@ -27,9 +27,9 @@ namespace ParkourKnuckle
         public static Dictionary<string, ConfigEntryBase> SkillConfigs = new Dictionary<string, ConfigEntryBase>();
         void Awake()
         {
-            EnableParkourRotation = Config.Bind("Camera Settings", "Use Parkour Rotation", true, "Determines whether the camera will tilt and rotate differently when doing parkour actions.");
-            EnableParkourFOV = Config.Bind("Camera Settings", "Use Parkour FOV", true, "Determines whether the camera will zoom in and out during specific parkour actions.");
-            EnableParkourShake = Config.Bind("Camera Settings", "Use Parkour Shake", true, "Determines whether the camera will shake during specific parkour actions.");
+            EnableParkourRotation = Config.Bind("Camera Settings", "Use Parkour Rotation", true, "Determines whether the camera will tilt and rotate differently during wall runs and rolls.");
+            EnableParkourFOV = Config.Bind("Camera Settings", "Use Parkour FOV", true, "Determines whether the camera will zoom in and out while charging, leaping, and sliding.");
+            EnableParkourShake = Config.Bind("Camera Settings", "Use Parkour Shake", true, "Determines whether the camera will shake while wall running and charging.");
             EnableWallRunHelper = Config.Bind("UI Settings", "Use the Wall Run Helper", false, "When a wall run is able to be performed, the sides of your screen will glow.");
 
             string saveSkillPath = Path.Combine(Paths.ConfigPath, "parkourprogress.cfg");
@@ -49,10 +49,10 @@ namespace ParkourKnuckle
 
             this._harmony = new Harmony("com.nimius.parkourknuckle");
             this._harmony.PatchAll();
-            Logger.LogInfo("Harmony Patches applied successfully.");
+            Logger.LogInfo("Parkour Knuckle Patches Applied Successfully.");
 
             ParkourUI.Initialize();
-            Logger.LogInfo("Parkour UI Engine Initialized.");
+            Logger.LogInfo("Parkour Knuckle Initialized.");
         }
     }
 
@@ -175,6 +175,23 @@ namespace ParkourKnuckle
             isHolding = false;
             ExpireRollingFallDamageCancel();
 
+            if (CLGameManagerPatch.DidRestartThisFrame)
+            {
+                CLGameManagerPatch.DidRestartThisFrame = false;
+
+                isRotating = false;
+                isSliding = false;
+                hasWallRunInAir = false;
+                hasWallRunVertical = false;
+                isHorizRun = false;
+                isVerticalRun = false;
+                onCooldown = false;
+                CooldownTime = 0;
+                isCharging = false;
+                leapCooldown = false;
+                leapCooldownTime = 0;
+            }
+
             foreach (var hand in player.hands)
             {
                 if (hand.handhold != null && hand.handhold.GetHolding())
@@ -230,7 +247,7 @@ namespace ParkourKnuckle
                 }
             }
 
-            if (Input.GetKeyDown(KeyCode.G) && (isGrounded || isHolding) && !leapCooldown)
+            if (Input.GetKeyDown(KeyCode.G) && !leapCooldown)
             {
                 if (((ConfigEntry<bool>)Plugin.SkillConfigs["Leaping"]).Value)
                 {
@@ -287,6 +304,7 @@ namespace ParkourKnuckle
                         isCharging = false;
                         return;
                     }
+
                     currentCharge = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
                     float chargeDuration = Mathf.Min(Time.time - chargeStartTime, maxChargeTime);
                     float finalForce = chargeDuration * (leapForceMultiplier * ((roidedCount / 2) + 1));
@@ -319,10 +337,9 @@ namespace ParkourKnuckle
                 }
             }
 
-            if (!isGrounded)
+            if (!isGrounded && !isHolding)
             {
                 currentCharge = 0f;
-                isHolding = false;
                 isCharging = false;
             }
 
@@ -808,7 +825,7 @@ namespace ParkourKnuckle
                     slideTime = slideDuration;
 
                     if (Plugin.EnableParkourShake.Value)
-                    {
+                    { 
                         CL_CameraControl.Shake(Time.deltaTime * 0.1f);
                     }
 
@@ -823,6 +840,29 @@ namespace ParkourKnuckle
                 }
                 else
                 {
+                    RaycastHit[] hits = Physics.SphereCastAll(player.transform.position + (Vector3.down * 1.1f), 0.25f, slideDir, 1.3f);
+
+                    if (hits.Length > 0)
+                    {
+                        foreach (RaycastHit kickHit in hits)
+                        {
+                            if (kickHit.collider == null) continue;
+
+                            Rigidbody rb = kickHit.collider.gameObject.GetComponentInChildren<Rigidbody>();
+
+                            if (rb != null)
+                            {
+                                rb.isKinematic = false;
+                                rb.WakeUp();
+
+                                Vector3 slideKickForceDir = (slideDir + Vector3.up * (0.3f * (1f - (slideTime / slideDuration)))).normalized;
+
+                                float slideKickVelocity = (3f * (1f - (slideTime / slideDuration))) * ((roidedCount / 10f) + 1f);
+                                rb.AddForce(slideKickForceDir * slideKickVelocity, ForceMode.VelocityChange);
+                            }
+                        }
+                    }
+
                     player.transform.position = nextPos;
 
                     if (Plugin.EnableParkourFOV.Value)
@@ -984,7 +1024,7 @@ namespace ParkourKnuckle
     {
         private static bool playerExisted = false;
 
-        [HarmonyPrefix]
+        [HarmonyPostfix]
         public static void Postfix()
         {
             float levelHighestHeight = PlayerModifierPatch.levelHighestHeight;
@@ -1028,6 +1068,20 @@ namespace ParkourKnuckle
                 ((ConfigEntry<float>)Plugin.SkillConfigs["HeightCurrency"]).Value = ParkourUI.newCurrencyAmount;
                 ParkourUI.hasPurchased = false;
                 ParkourUI.UpdateCurrencyDisplay();
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(CL_GameManager), "ChangeState")]
+    public static class CLGameManagerPatch
+    {
+        public static bool DidRestartThisFrame = false;
+
+        public static void Prefix(string s)
+        {
+            if (s == "restart")
+            {
+                DidRestartThisFrame = true;
             }
         }
     }

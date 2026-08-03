@@ -184,19 +184,13 @@ namespace ParkourKnuckle.UI
             {
                 wasPlayerObjectPresent = true;
                 if (Plugin.isUIVisible) ToggleUIPanel(false);
-                if (openButtonObj != null) openButtonObj.SetActive(false);
+                openButtonObj?.SetActive(false);
 
-                if (currencyIconObj != null) currencyIconObj.SetActive(false);
+                currencyIconObj?.SetActive(false);
 
-                if (abilityTimesContainer != null)
-                {
-                    abilityTimesContainer.SetActive(true);
-                }
+                abilityTimesContainer?.SetActive(true);
 
-                if (wallRunFadeHelper != null)
-                {
-                    wallRunFadeHelper.SetActive(true);
-                }
+                wallRunFadeHelper?.SetActive(true);
             }
             else if (!isPlayerObjectPresent && wasPlayerObjectPresent)
             {
@@ -213,15 +207,10 @@ namespace ParkourKnuckle.UI
                     UpdateCurrencyDisplay();
                 }
 
-                if (abilityTimesContainer != null)
-                {
-                    abilityTimesContainer.SetActive(false);
-                }
+                abilityTimesContainer?.SetActive(false);
 
-                if (wallRunFadeHelper != null)
-                {
-                    wallRunFadeHelper.SetActive(false);
-                }
+
+                wallRunFadeHelper?.SetActive(false);
             }
 
             if (isPlayerObjectPresent)
@@ -269,6 +258,7 @@ namespace ParkourKnuckle.UI
                 if (currencyIconObj != null && (ENT_Player.playerObject.health <= 0 || cachedGameManager.isPaused))
                 {
                     currencyIconObj.SetActive(true);
+                    UpdateCurrencyDisplay();
                 } else if (currencyIconObj != null && (ENT_Player.playerObject.health > 0 && !cachedGameManager.isPaused))
                 {
                     currencyIconObj.SetActive(false);
@@ -276,21 +266,21 @@ namespace ParkourKnuckle.UI
 
                 if (wallRunFadeHelper != null && Plugin.EnableWallRunHelper.Value)
                 {
-                    if (wallRunLeftGroup != null)
+                    if (wallRunLeftGroup != null && ((ConfigEntry<bool>)Plugin.SkillConfigs["WallRunning"]).Value)
                     {
                         bool shouldShowLeft = PlayerModifierPatch.canRun && PlayerModifierPatch.wallLeft && !PlayerModifierPatch.hasWallRunInAir && !PlayerModifierPatch.isHorizRun;
                         float targetAlphaLeft = shouldShowLeft ? 1f : 0f;
                         wallRunLeftGroup.alpha = Mathf.MoveTowards(wallRunLeftGroup.alpha, targetAlphaLeft, FADE_SPEED * Time.deltaTime);
                     }
 
-                    if (wallRunRightGroup != null)
+                    if (wallRunRightGroup != null && ((ConfigEntry<bool>)Plugin.SkillConfigs["WallRunning"]).Value)
                     {
                         bool shouldShowRight = PlayerModifierPatch.canRun && PlayerModifierPatch.wallRight && !PlayerModifierPatch.hasWallRunInAir && !PlayerModifierPatch.isHorizRun;
                         float targetAlphaRight = shouldShowRight ? 1f : 0f;
                         wallRunRightGroup.alpha = Mathf.MoveTowards(wallRunRightGroup.alpha, targetAlphaRight, FADE_SPEED * Time.deltaTime);
                     }
 
-                    if (wallRunUpGroup != null)
+                    if (wallRunUpGroup != null && ((ConfigEntry<bool>)Plugin.SkillConfigs["VerticalWallRunning"]).Value)
                     {
                         bool shouldShowUp = PlayerModifierPatch.canVert && PlayerModifierPatch.wallFront && !PlayerModifierPatch.hasWallRunVertical && !PlayerModifierPatch.isVerticalRun;
                         float targetAlphaUp = shouldShowUp ? 1f : 0f;
@@ -328,7 +318,7 @@ namespace ParkourKnuckle.UI
 
             if (cachedGameManager != null)
             {
-                if (CL_GameManager.IsLoading() && !hadLoading)
+                if (CL_GameManager.IsLoading() && !hadLoading && M_Level.FindAnyObjectByType<M_Level>() == null)
                 {
                     hadLoading = true;
                     loadingScreen.SetActive(true);
@@ -550,66 +540,45 @@ namespace ParkourKnuckle.UI
             loadingScreen = uiInstance.transform.Find("LoadingScreen")?.gameObject;
             wallRunFadeHelper = uiInstance.transform.Find("WallRunHelper")?.gameObject;
 
-            if (skillTreePanel != null)
+            if (skillTreePanel == null) return; 
+
+            closeButtonObj = skillTreePanel.transform.Find("CloseSTButton")?.gameObject;
+            optionsContentObj = skillTreePanel.transform.Find("OptionsContent")?.gameObject;
+            descriptionPanelObj = skillTreePanel.transform.Find("PerkDescription")?.gameObject;
+            resetConfirmBox = skillTreePanel.transform.Find("ResetConfirmBox")?.gameObject;
+
+            contentTransform = skillTreePanel.transform.Find("PerkContent") ?? skillTreePanel.transform.Find("Content");
+
+            if (resetConfirmBox != null)
             {
-                closeButtonObj = skillTreePanel.transform.Find("CloseSTButton")?.gameObject;
+                resetConfirmBox.SetActive(false);
+                confirmButton = resetConfirmBox.transform.Find("ConfirmButton")?.GetComponent<Button>();
+                denyButton = resetConfirmBox.transform.Find("DenyButton")?.GetComponent<Button>();
 
-                contentTransform = skillTreePanel.transform.Find("PerkContent");
-                if (contentTransform == null)
-                {
-                    contentTransform = skillTreePanel.transform.Find("Content");
-                }
+                if (confirmButton != null) { confirmButton.onClick.RemoveAllListeners(); confirmButton.onClick.AddListener(HandleResetConfirmed); }
+                if (denyButton != null) { denyButton.onClick.RemoveAllListeners(); denyButton.onClick.AddListener(HandleResetDenied); }
+            }
 
-                optionsContentObj = skillTreePanel.transform.Find("OptionsContent")?.gameObject;
-                descriptionPanelObj = skillTreePanel.transform.Find("PerkDescription")?.gameObject;
-                resetConfirmBox = skillTreePanel.transform.Find("ResetConfirmBox")?.gameObject;
+            headerGroup = skillTreePanel.transform.Find("STMainTextHeader");
+            forwardButtonObj = headerGroup?.Find("ForwardButton")?.gameObject;
+            backButtonObj = headerGroup?.Find("BackButton")?.gameObject;
+            textHeaderComponent = headerGroup?.GetComponentInChildren<TextMeshProUGUI>(true);
 
-                if (resetConfirmBox != null)
-                {
-                    resetConfirmBox.SetActive(false);
-                    confirmButton = resetConfirmBox.transform.Find("ConfirmButton")?.GetComponent<Button>();
-                    denyButton = resetConfirmBox.transform.Find("DenyButton")?.GetComponent<Button>();
+            if (optionsContentObj != null)
+            {
+                var optTrans = optionsContentObj.transform;
+                cameraRotationToggle = optTrans.Find("EPRToggle")?.GetComponent<Toggle>();
+                cameraFOVToggle = optTrans.Find("EPFToggle")?.GetComponent<Toggle>();
+                cameraShakeToggle = optTrans.Find("EPSToggle")?.GetComponent<Toggle>();
+                uiGlowToggle = optTrans.Find("EWRHToggle")?.GetComponent<Toggle>();
+                resetProgressButton = optTrans.Find("ResetButton")?.GetComponent<Button>();
+            }
 
-                    if (confirmButton != null)
-                    {
-                        confirmButton.onClick.RemoveAllListeners();
-                        confirmButton.onClick.AddListener(HandleResetConfirmed);
-                    }
-
-                    if (denyButton != null)
-                    {
-                        denyButton.onClick.RemoveAllListeners();
-                        denyButton.onClick.AddListener(HandleResetDenied);
-                    }
-                }
-
-                headerGroup = skillTreePanel.transform.Find("STMainTextHeader");
-                if (headerGroup != null)
-                {
-                    forwardButtonObj = headerGroup.Find("ForwardButton")?.gameObject;
-                    backButtonObj = headerGroup.Find("BackButton")?.gameObject;
-                    textHeaderComponent = headerGroup.GetComponentInChildren<TextMeshProUGUI>(true);
-                }
-
-                if (optionsContentObj != null)
-                {
-                    cameraRotationToggle = optionsContentObj.transform.Find("EPRToggle")?.GetComponent<Toggle>();
-                    cameraFOVToggle = optionsContentObj.transform.Find("EPFToggle")?.GetComponent<Toggle>();
-                    cameraShakeToggle = optionsContentObj.transform.Find("EPSToggle")?.GetComponent<Toggle>();
-                    uiGlowToggle = optionsContentObj.transform.Find("EWRGToggle")?.GetComponent<Toggle>();
-                    resetProgressButton = optionsContentObj.transform.Find("ResetButton")?.GetComponent<Button>();
-                }
-
-                if (descriptionPanelObj != null)
-                {
-                    perkDescriptionText = descriptionPanelObj.transform.Find("PerkDescText")?.GetComponent<TextMeshProUGUI>();
-                    purchaseButton = descriptionPanelObj.transform.Find("PurchaseButton")?.GetComponent<Button>();
-
-                    if (purchaseButton != null)
-                    {
-                        purchaseButtonText = purchaseButton.transform.Find("PurchaseText")?.GetComponent<TextMeshProUGUI>();
-                    }
-                }
+            if (descriptionPanelObj != null)
+            {
+                perkDescriptionText = descriptionPanelObj.transform.Find("PerkDescText")?.GetComponent<TextMeshProUGUI>();
+                purchaseButton = descriptionPanelObj.transform.Find("PurchaseButton")?.GetComponent<Button>();
+                purchaseButtonText = purchaseButton?.transform.Find("PurchaseText")?.GetComponent<TextMeshProUGUI>();
             }
 
             CreateClickOutsideBlocker();
@@ -660,15 +629,14 @@ namespace ParkourKnuckle.UI
             }
 
             currencyAddObj = uiInstance.transform.Find("CurrencyAdd")?.gameObject;
-            if (currencyAddObj != null)
-            {
-                currencyAddCanvasGroup = currencyAddObj.GetComponent<CanvasGroup>();
-                if (currencyAddCanvasGroup == null) currencyAddCanvasGroup = currencyAddObj.AddComponent<CanvasGroup>();
+            if (currencyAddObj == null) return;
 
-                mainText = currencyAddObj.transform.Find("CurrencyAddTextMain")?.GetComponent<TextMeshProUGUI>();
-                infoText = currencyAddObj.transform.Find("CurrencyAddTextInto")?.GetComponent<TextMeshProUGUI>();
-                currencyAddObj.SetActive(false);
-            }
+            currencyAddCanvasGroup = currencyAddObj.GetComponent<CanvasGroup>();
+            currencyAddCanvasGroup = currencyAddCanvasGroup ?? currencyAddObj.AddComponent<CanvasGroup>();
+
+            mainText = currencyAddObj.transform.Find("CurrencyAddTextMain")?.GetComponent<TextMeshProUGUI>();
+            infoText = currencyAddObj.transform.Find("CurrencyAddTextInto")?.GetComponent<TextMeshProUGUI>();
+            currencyAddObj.SetActive(false);
 
             if (abilityTimesContainer != null)
             {
@@ -892,24 +860,18 @@ namespace ParkourKnuckle.UI
 
         private void SwitchSubMenuContext(bool showPerksTree)
         {
-            if (contentTransform != null) contentTransform.gameObject.SetActive(showPerksTree);
-            if (optionsContentObj != null) optionsContentObj.SetActive(!showPerksTree);
-            if (descriptionPanelObj != null) descriptionPanelObj.SetActive(false);
+            contentTransform?.gameObject.SetActive(showPerksTree);
+            optionsContentObj?.SetActive(!showPerksTree);
+            descriptionPanelObj?.SetActive(false);
 
-            if (headerGroup != null) headerGroup.gameObject.SetActive(true);
-            if (forwardButtonObj != null) forwardButtonObj.SetActive(showPerksTree);
-            if (backButtonObj != null) backButtonObj.SetActive(!showPerksTree);
+            headerGroup?.gameObject.SetActive(true);
+            forwardButtonObj?.SetActive(showPerksTree);
+            backButtonObj?.SetActive(!showPerksTree);
 
-            if (textHeaderComponent != null)
-            {
-                textHeaderComponent.gameObject.SetActive(true);
-                textHeaderComponent.text = showPerksTree ? "SKILL TREE" : "OPTIONS";
-            }
+            textHeaderComponent?.gameObject.SetActive(true);
+            textHeaderComponent.text = showPerksTree ? "SKILL TREE" : "OPTIONS";
 
-            if (!showPerksTree && cameraRotationToggle != null)
-            {
-                cameraRotationToggle.isOn = Plugin.EnableParkourRotation.Value;
-            }
+            if (!showPerksTree && cameraRotationToggle != null) cameraRotationToggle.isOn = Plugin.EnableParkourRotation.Value;
 
             if (!showPerksTree && cameraFOVToggle != null)
             {
@@ -936,7 +898,7 @@ namespace ParkourKnuckle.UI
         private IEnumerator FadePanel(GameObject obj, bool fadeIn, float duration)
         {
             CanvasGroup cg = obj.GetComponent<CanvasGroup>();
-            if (cg == null) cg = obj.AddComponent<CanvasGroup>();
+            cg = cg ?? obj.AddComponent<CanvasGroup>();
 
             float startAlpha = cg.alpha;
             float endAlpha = fadeIn ? 1f : 0f;
@@ -978,25 +940,25 @@ namespace ParkourKnuckle.UI
 
         private void ShowResetConfirmPopup()
         {
-            if (optionsContentObj != null) optionsContentObj.SetActive(false);
-            if (headerGroup != null) headerGroup.gameObject.SetActive(false);
-            if (resetConfirmBox != null) resetConfirmBox.SetActive(true);
+            optionsContentObj?.SetActive(false);
+            headerGroup?.gameObject.SetActive(false);
+            resetConfirmBox?.SetActive(true);
         }
 
         private void HandleResetConfirmed()
         {
             OnResetRequested();
 
-            if (resetConfirmBox != null) resetConfirmBox.SetActive(false);
-            if (optionsContentObj != null) optionsContentObj.SetActive(true);
-            if (headerGroup != null) headerGroup.gameObject.SetActive(true);
+            resetConfirmBox?.SetActive(false);
+            optionsContentObj?.SetActive(true);
+            headerGroup?.gameObject.SetActive(true);
         }
 
         private void HandleResetDenied()
         {
-            if (resetConfirmBox != null) resetConfirmBox.SetActive(false);
-            if (optionsContentObj != null) optionsContentObj.SetActive(true);
-            if (headerGroup != null) headerGroup.gameObject.SetActive(true);
+            resetConfirmBox?.SetActive(false);
+            optionsContentObj?.SetActive(true);
+            headerGroup?.gameObject.SetActive(true);
         }
 
         private void MapProgressionNodes()
@@ -1113,27 +1075,26 @@ namespace ParkourKnuckle.UI
                 if (contentTransform != null)
                 {
                     CanvasGroup cg = contentTransform.GetComponent<CanvasGroup>();
-                    if (cg == null) cg = contentTransform.gameObject.AddComponent<CanvasGroup>();
+                    cg = cg ?? contentTransform.gameObject.AddComponent<CanvasGroup>();
 
                     StartCoroutine(FadeCanvasGroup(cg, 1f, 0f, 0.2f));
 
                     StartCoroutine(DeactivateAfterDelay(contentTransform.gameObject, 0.2f));
                 }
 
-                if (textHeaderComponent != null) textHeaderComponent.gameObject.SetActive(false);
+                textHeaderComponent?.gameObject.SetActive(false);
 
-                if (headerGroup != null) headerGroup.gameObject.SetActive(true);
-                if (forwardButtonObj != null) forwardButtonObj.SetActive(false);
-                if (backButtonObj != null) backButtonObj.SetActive(true);
+                headerGroup?.gameObject.SetActive(true);
+                forwardButtonObj?.SetActive(false);
+                backButtonObj?.SetActive(true);
 
-                if (descriptionPanelObj != null)
-                {
-                    RectTransform descRect = descriptionPanelObj.GetComponent<RectTransform>();
-                    descRect.anchoredPosition = new Vector2(1000f, 0f);
-                    descriptionPanelObj.SetActive(true);
+                if (descriptionPanelObj == null) return;
 
-                    StartCoroutine(AnimateSlide(descriptionPanelObj, descRect.anchoredPosition, Vector2.zero, 0.3f));
-                }
+                RectTransform descRect = descriptionPanelObj.GetComponent<RectTransform>();
+                descRect.anchoredPosition = new Vector2(1000f, 0f);
+                descriptionPanelObj.SetActive(true);
+
+                StartCoroutine(AnimateSlide(descriptionPanelObj, descRect.anchoredPosition, Vector2.zero, 0.3f));
 
                 if (perkDescriptionText != null)
                 {
@@ -1150,7 +1111,7 @@ namespace ParkourKnuckle.UI
                     if (((ConfigEntry<bool>)config).Value)
                     {
                         purchaseButton.interactable = false;
-                        if (purchaseButtonText != null) purchaseButtonText.text = "ACTIVE";
+                        if (purchaseButtonText != null) purchaseButtonText.text = "MAXED";
                     }
                     else
                     {
@@ -1166,8 +1127,8 @@ namespace ParkourKnuckle.UI
 
                 if (((ConfigEntry<bool>)config).Value)
                 {
-                    if (perkCurrencyText != null) perkCurrencyText.gameObject.SetActive(false);
-                    if (perkCurrencyIcon != null) perkCurrencyIcon.SetActive(false);
+                    perkCurrencyText?.gameObject.SetActive(false);
+                    perkCurrencyIcon?.SetActive(false);
                 }
                 else
                 {
@@ -1177,12 +1138,12 @@ namespace ParkourKnuckle.UI
                         float price = skillPrices.TryGetValue(configKey, out float p) ? p : 0f;
                         perkCurrencyText.text = price > 0 ? price.ToString() : "FREE";
                     }
-                    if (perkCurrencyIcon != null) perkCurrencyIcon.SetActive(true);
+                    perkCurrencyIcon?.SetActive(true);
                 }
 
                 foreach (var icon in perkIcons.Values)
                 {
-                    if (icon != null) icon.SetActive(false);
+                    icon?.SetActive(false);
                 }
 
                 string iconName;
@@ -1202,6 +1163,7 @@ namespace ParkourKnuckle.UI
                 }
             }
         }
+
         private IEnumerator DeactivateAfterDelay(GameObject obj, float delay)
         {
             yield return new WaitForSeconds(delay);
@@ -1252,8 +1214,8 @@ namespace ParkourKnuckle.UI
                     if (purchaseButtonText != null) purchaseButtonText.text = "ACTIVE";
                 }
 
-                if (perkCurrencyText != null) perkCurrencyText.gameObject.SetActive(false);
-                if (perkCurrencyIcon != null) perkCurrencyIcon.SetActive(false);
+                perkCurrencyText?.gameObject.SetActive(false);
+                perkCurrencyIcon?.SetActive(false);
             }
         }
 
@@ -1262,18 +1224,17 @@ namespace ParkourKnuckle.UI
             string nodeToAnimate = currentlySelectedSkillKey;
             bool triggerEffects = pendingPurchaseAnimation;
 
-            if (forwardButtonObj != null) forwardButtonObj.SetActive(true);
-            if (backButtonObj != null) backButtonObj.SetActive(false);
+            forwardButtonObj?.SetActive(true);
+            backButtonObj?.SetActive(false);
 
-            if (textHeaderComponent != null) textHeaderComponent.gameObject.SetActive(true);
+            textHeaderComponent?.gameObject.SetActive(true);
 
             if (descriptionPanelObj != null)
             {
-                RectTransform descRect = descriptionPanelObj.GetComponent<RectTransform>();
                 StartCoroutine(AnimateSlide(descriptionPanelObj, Vector2.zero, new Vector2(1000f, 0f), 0.3f));
             }
 
-            if (contentTransform != null) contentTransform.gameObject.SetActive(false);
+            contentTransform?.gameObject.SetActive(false);
 
             StartCoroutine(DelayedReturnLogic(nodeToAnimate, triggerEffects));
         }
@@ -1282,12 +1243,12 @@ namespace ParkourKnuckle.UI
         {
             yield return new WaitForSeconds(0.3f);
 
-            if (descriptionPanelObj != null) descriptionPanelObj.SetActive(false);
+            descriptionPanelObj?.SetActive(false);
 
             if (contentTransform != null)
             {
                 CanvasGroup cg = contentTransform.GetComponent<CanvasGroup>();
-                if (cg == null) cg = contentTransform.gameObject.AddComponent<CanvasGroup>();
+                cg =  cg ?? contentTransform.gameObject.AddComponent<CanvasGroup>();
 
                 contentTransform.gameObject.SetActive(true);
                 cg.alpha = 0f;
