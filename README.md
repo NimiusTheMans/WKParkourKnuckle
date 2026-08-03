@@ -66,6 +66,11 @@ While you are falling from great height, hold down your crouch button to initiat
 
 ![](https://github.com/NimiusTheMans/WKParkourKnuckle/blob/main/Assets/Gifs/Roll.gif?raw=true)
 
+# Donation
+Donate to help support me and my making of mods!
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/K3N62124UD)
+
 ## Version 1.4.8 SP
 ### Main Changes
 (+)
